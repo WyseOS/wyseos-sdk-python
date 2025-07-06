@@ -1,0 +1,13 @@
+# Wyse Mate Python SDK Requirements
+
+# HTTP client library
+requests>=2.31.0
+
+# Data validation and serialization
+pydantic>=2.0.0
+
+# WebSocket client
+websockets>=11.0.0
+
+# YAML configuration support
+PyYAML>=6.0.0
