@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+mate-sdk-env/
+.venv
+
+# Editors and IDEs
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Configuration files
+mate.yaml
+
+# OS-specific files
+.DS_Store
+Thumbs.db 

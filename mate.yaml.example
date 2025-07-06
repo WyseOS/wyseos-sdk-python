@@ -1,0 +1,6 @@
+# API Configuration
+api_key: ""
+base_url: ""
+
+# Client Configuration
+timeout: 30s
