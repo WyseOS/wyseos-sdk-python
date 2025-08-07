@@ -164,6 +164,7 @@ def websocket_operations(client: Client, session: SessionInfo):
     try:
         print("  Setting up WebSocket connection...")
         message_count = 0
+        msg_list = []
 
         def on_message(message):
             nonlocal message_count
@@ -195,7 +196,9 @@ def websocket_operations(client: Client, session: SessionInfo):
                 request_id = WebSocketClient.get_request_id(message)
                 print(f"    Extracted request_id: {request_id}")
 
-                if request_id:
+                is_response_plan = msg_list[-1].get("type") == MessageType.PLAN
+
+                if request_id and is_response_plan:
                     try:
                         acceptance_message = (
                             WebSocketClient.create_plan_acceptance_response(request_id)
@@ -226,6 +229,8 @@ def websocket_operations(client: Client, session: SessionInfo):
                         import traceback
 
                         traceback.print_exc()
+                elif request_id:
+                    """TODO input next message"""
                 else:
                     print("Input request (no ID)")
                     print(f"Message keys: {list(message.keys())}")
@@ -254,6 +259,8 @@ def websocket_operations(client: Client, session: SessionInfo):
                 print(f"Unhandled type: {msg_type}")
                 if should_print_browser:
                     print_browser_info()
+            if msg_type not in [MessageType.PING, MessageType.PONG]:
+                msg_list.append(message)
 
         ws_client = WebSocketClient(
             base_url=client.base_url,
@@ -288,7 +295,7 @@ def websocket_operations(client: Client, session: SessionInfo):
                 "messages": [{"type": "task", "content": initial_task}],
                 "attachments": [],
                 "team_id": session.team_id,
-                "session_round": current_round,
+                "kb_ids": [],
             },
         }
         ws_client.send_message(start_message)
@@ -319,7 +326,7 @@ def websocket_operations(client: Client, session: SessionInfo):
                     "text": user_input,
                     "request_id": str(uuid.uuid4()),
                     "attachments": [],
-                    "session_round": current_round,
+                    # "session_round": current_round,
                 },
             }
             ws_client.send_message(input_message)
