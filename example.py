@@ -230,7 +230,28 @@ def websocket_operations(client: Client, session: SessionInfo):
 
                         traceback.print_exc()
                 elif request_id:
-                    """TODO input next message"""
+                    try:
+                        user_msg = input("请输入你的回复: ").strip()
+                        if user_msg:
+                            reply_message = {
+                                "type": MessageType.INPUT,
+                                "data": {
+                                    "input_type": "text",
+                                    "text": user_input,
+                                    "request_id": request_id,
+                                },
+                            }
+                            ws_client.send_message(reply_message)
+                            print(f"已发送消息: {user_msg}")
+                            if not ws_client.connected:
+                                print(
+                                    "    WebSocket not connected, cannot send message"
+                                )
+                                return
+
+                            ws_client.send_message(acceptance_message)
+                    except Exception as e:
+                        print(f"Failed to send message: {e}")
                 else:
                     print("Input request (no ID)")
                     print(f"Message keys: {list(message.keys())}")
@@ -318,20 +339,20 @@ def websocket_operations(client: Client, session: SessionInfo):
                 time.sleep(5)
                 continue
 
-            current_round += 1
-            input_message = {
-                "type": MessageType.INPUT,
-                "data": {
-                    "input_type": "text",
-                    "text": user_input,
-                    "request_id": str(uuid.uuid4()),
-                    "attachments": [],
-                    # "session_round": current_round,
-                },
-            }
-            ws_client.send_message(input_message)
-            print(f"  → Sent: {user_input}")
-            time.sleep(5)
+            # current_round += 1
+            # input_message = {
+            #     "type": MessageType.INPUT,
+            #     "data": {
+            #         "input_type": "text",
+            #         "text": user_input,
+            #         "request_id": str(uuid.uuid4()),
+            #         "attachments": [],
+            #         # "session_round": current_round,
+            #     },
+            # }
+            # ws_client.send_message(input_message)
+            # print(f"  → Sent: {user_input}")
+            # time.sleep(5)
 
         ws_client.disconnect()
         print(f"  Session completed ({message_count} messages)")
