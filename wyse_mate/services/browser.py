@@ -1,7 +1,5 @@
 """
 Browser service for the Mate SDK Python.
-
-This module contains the BrowserService class for browser-related API operations.
 """
 
 from typing import TYPE_CHECKING, Optional

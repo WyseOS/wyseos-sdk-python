@@ -1,6 +1,6 @@
 # API Configuration
 api_key: ""
-base_url: ""
+base_url: "https://api.dev.wyseos.com"
 
 # Client Configuration
-timeout: 30s
+timeout: 30

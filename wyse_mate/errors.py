@@ -1,7 +1,5 @@
 """
 Custom exception classes for the Wyse Mate Python SDK.
-
-This module defines custom exception classes and utilities for handling API errors.
 """
 
 from typing import Any, Dict, Optional
@@ -20,16 +18,6 @@ class APIError(Exception):
         details: Optional[Dict[str, Any]] = None,
         request_id: Optional[str] = None,
     ):
-        """
-        Initialize API error.
-
-        Args:
-            message: Error message
-            code: API error code
-            status_code: HTTP status code
-            details: Additional error details
-            request_id: Request ID for debugging
-        """
         super().__init__(message)
         self.message = message
         self.code = code
@@ -38,7 +26,6 @@ class APIError(Exception):
         self.request_id = request_id
 
     def __str__(self) -> str:
-        """String representation of the error."""
         parts = [f"APIError: {self.message}"]
 
         if self.code:
@@ -63,22 +50,10 @@ class ValidationError(APIError):
         details: Optional[Dict[str, Any]] = None,
         request_id: Optional[str] = None,
     ):
-        """
-        Initialize validation error.
-
-        Args:
-            message: Error message
-            field: Field that failed validation
-            code: API error code
-            status_code: HTTP status code
-            details: Additional error details
-            request_id: Request ID for debugging
-        """
         super().__init__(message, code, status_code, details, request_id)
         self.field = field
 
     def __str__(self) -> str:
-        """String representation of the validation error."""
         base_str = super().__str__()
         if self.field:
             base_str = base_str.replace(
@@ -93,19 +68,11 @@ class NetworkError(Exception):
     """For network-related issues."""
 
     def __init__(self, message: str, cause: Optional[Exception] = None):
-        """
-        Initialize network error.
-
-        Args:
-            message: Error message
-            cause: Original exception that caused this error
-        """
         super().__init__(message)
         self.message = message
         self.cause = cause
 
     def __str__(self) -> str:
-        """String representation of the network error."""
         if self.cause:
             return f"NetworkError: {self.message} (Caused by: {self.cause})"
         return f"NetworkError: {self.message}"
@@ -120,21 +87,12 @@ class WebSocketError(Exception):
         session_id: Optional[str] = None,
         cause: Optional[Exception] = None,
     ):
-        """
-        Initialize WebSocket error.
-
-        Args:
-            message: Error message
-            session_id: Session ID related to the error
-            cause: Original exception that caused this error
-        """
         super().__init__(message)
         self.message = message
         self.session_id = session_id
         self.cause = cause
 
     def __str__(self) -> str:
-        """String representation of the WebSocket error."""
         parts = [f"WebSocketError: {self.message}"]
 
         if self.session_id:
@@ -154,21 +112,12 @@ class ConfigError(Exception):
         field: Optional[str] = None,
         cause: Optional[Exception] = None,
     ):
-        """
-        Initialize configuration error.
-
-        Args:
-            message: Error message
-            field: Configuration field that caused the error
-            cause: Original exception that caused this error
-        """
         super().__init__(message)
         self.message = message
         self.field = field
         self.cause = cause
 
     def __str__(self) -> str:
-        """String representation of the configuration error."""
         parts = [f"ConfigError: {self.message}"]
 
         if self.field:
@@ -179,7 +128,6 @@ class ConfigError(Exception):
         return " | ".join(parts)
 
 
-# Specific Error Types
 class AuthenticationError(APIError):
     """Authentication related errors."""
 
@@ -216,34 +164,21 @@ class ServerError(APIError):
 
 
 def _handle_api_error(response: requests.Response) -> None:
-    """
-    Parse an HTTP response and raise the appropriate exception.
-
-    Args:
-        response: HTTP response object
-
-    Raises:
-        APIError: Appropriate API error based on status code and response body
-    """
     status_code = response.status_code
     request_id = response.headers.get("X-Request-ID")
 
     try:
-        # Try to parse JSON error response
         error_data = response.json()
         message = error_data.get("msg", "Unknown error")
         code = error_data.get("code")
         details = error_data.get("details", {})
 
     except (ValueError, KeyError):
-        # Fallback to generic error message if JSON parsing fails
         message = f"HTTP {status_code}: {response.reason}"
         code = None
         details = {}
 
-    # Create specific error types based on status code
     if status_code == 400:
-        # Check if it's a validation error
         if "validation" in message.lower() or "invalid" in message.lower():
             field = details.get("field")
             raise ValidationError(
@@ -309,7 +244,6 @@ def _handle_api_error(response: requests.Response) -> None:
         )
 
     else:
-        # Generic API error for other status codes
         raise APIError(
             message=message,
             code=code,

@@ -1,7 +1,5 @@
 """
 User service for the Mate SDK Python.
-
-This module contains the UserService class for user-related API operations.
 """
 
 from typing import TYPE_CHECKING, Optional

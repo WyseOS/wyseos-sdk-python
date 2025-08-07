@@ -1,7 +1,5 @@
 """
 Agent service for the Mate SDK Python.
-
-This module contains the AgentService class for agent-related API operations.
 """
 
 from typing import TYPE_CHECKING, Optional

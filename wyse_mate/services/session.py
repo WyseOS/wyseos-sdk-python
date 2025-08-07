@@ -1,7 +1,5 @@
 """
 Session service for the Mate SDK Python.
-
-This module contains the SessionService class for session-related API operations.
 """
 
 from typing import TYPE_CHECKING, Optional

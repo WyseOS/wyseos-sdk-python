@@ -1,10 +1,8 @@
 """
 Wyse Mate Python SDK
-
-A Python SDK for interacting with the Wyse Mate.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __author__ = "Wyse"
 __email__ = "info@wyseos.com"
 
