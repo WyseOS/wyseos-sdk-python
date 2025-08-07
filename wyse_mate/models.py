@@ -1,8 +1,5 @@
 """
 Data models for the Wyse Mate Python SDK.
-
-This module contains Pydantic models for all data structures, requests, and responses
-used in the Wyse Mate.
 """
 
 from datetime import datetime

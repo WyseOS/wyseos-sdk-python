@@ -1,7 +1,5 @@
 """
 Team service for the Mate SDK Python.
-
-This module contains the TeamService class for team-related API operations.
 """
 
 from typing import TYPE_CHECKING, Optional

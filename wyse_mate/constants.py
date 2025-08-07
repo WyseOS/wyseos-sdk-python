@@ -63,20 +63,6 @@ WEBSOCKET_PROTOCOL = "wss"
 WEBSOCKET_HEARTBEAT_INTERVAL = 30  # seconds
 WEBSOCKET_MAX_MESSAGE_SIZE = 1024 * 1024  # 1MB
 
-# File upload
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-ALLOWED_FILE_TYPES = [
-    "text/plain",
-    "application/pdf",
-    "image/jpeg",
-    "image/png",
-    "image/gif",
-    "application/json",
-    "text/csv",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-]
-
 # Team types
 TEAM_TYPE_DEEP_RESEARCH = "deep_research"
 TEAM_TYPE_WYSE_MATE = "wyse_mate"

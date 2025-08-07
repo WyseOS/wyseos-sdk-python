@@ -9,12 +9,13 @@ from typing import Optional
 
 # Import the SDK
 from wyse_mate import Client, ClientOptions
-from wyse_mate.config import load_default_config
+from wyse_mate.config import load_config
 from wyse_mate.models import (
     CreateSessionRequest,
     ListOptions,
+    SessionInfo,
 )
-from wyse_mate.websocket import WebSocketClient
+from wyse_mate.websocket import MessageType, WebSocketClient
 
 
 def main():
@@ -23,13 +24,8 @@ def main():
 
     # Try to load configuration from mate.yaml
     try:
-        config = load_default_config()
-        if config:
-            print("Loaded configuration from mate.yaml")
-            client = Client(config)
-        else:
-            print("No mate.yaml found, using default configuration")
-            client = Client(ClientOptions())
+        print("Loaded configuration from mate.yaml")
+        client = Client(load_config())
     except Exception as e:
         print(f"Error loading configuration: {e}")
         print("Using default configuration")
@@ -39,8 +35,8 @@ def main():
     # print("1. User API Keys Operations")
     # user_operations(client)
 
-    # print("\n2. Team Operations")
-    # team_operations(client)
+    print("\n2. Team Operations")
+    team_operations(client)
 
     # print("\n3. Agent Operations")
     # team_id = agent_operations(client, None)
@@ -52,8 +48,8 @@ def main():
     # session_id = session.session_id if session else None
     # browser_operations(client, session_id)
 
-    print("\n6. WebSocket Operations")
-    websocket_operations(client, session.session_id)
+    print("\n5. WebSocket Operations")
+    websocket_operations(client, session)
 
     print("\n=== Example completed ===")
 
@@ -130,7 +126,9 @@ def session_operations(client: Client, team_id: str):
 
     try:
         print("  Creating a new session...")
-        session_req = CreateSessionRequest(team_id=team_id, task="")
+        session_req = CreateSessionRequest(
+            team_id=team_id, task="tell me a joke about Rust language"
+        )
         create_resp = client.session.create(session_req)
         session_id = create_resp.session_id
         print(f"  Created new session: {session_id}")
@@ -146,158 +144,196 @@ def session_operations(client: Client, team_id: str):
         return None
 
 
-def browser_operations(client: Client, session_id: Optional[str]):
-    """browser-related operations."""
+def websocket_operations(client: Client, session: SessionInfo):
+    """WebSocket interactive session with complete start-to-stop flow."""
 
-    try:
-        # List existing browsers
-        print("  Listing browsers...")
-        browsers = client.browser.list_browsers(session_id)
-        print(f"  Found {browsers.total} browsers")
-
-        if browsers.browsers is not None and len(browsers.browsers) > 0:
-            browser = browsers.browsers[0]
-
-            # Get browser details
-            print("  Getting browser details...")
-            browser_details = client.browser.get_info(browser.browser_id)
-            print(f"  Browser status: {browser_details.status}")
-
-            # List browser pages
-            print("  Listing browser pages...")
-            pages = client.browser.list_browser_pages(browser.browser_id)
-            print(f"  Browser has {pages.total} pages")
-        else:
-            print("  No browsers found or browser list is empty.")
-
-    except Exception as e:
-        print(f"  Error in browser operations: {e}")
-
-
-def websocket_operations(client: Client, session_id: str):
-    """WebSocket functionality."""
+    def print_browser_info():
+        """Print current browser information."""
+        try:
+            browsers = client.browser.list_browsers(session.session_id)
+            if browsers.browsers and len(browsers.browsers) > 0:
+                browser = browsers.browsers[0]
+                browser_details = client.browser.get_info(browser.browser_id)
+                pages = client.browser.list_browser_pages(browser.browser_id)
+                print(f"    Browser: {browser_details.status} | Pages: {pages.total}")
+            else:
+                print("    Browser: None active")
+        except Exception:
+            print("    Browser: Error retrieving info")
 
     try:
         print("  Setting up WebSocket connection...")
-        # Message received counter
         message_count = 0
 
         def on_message(message):
             nonlocal message_count
             message_count += 1
-            msg_type = message.get("type", "unknown")
-            session_id = message.get("session_id", "N/A")
 
-            print(
-                f"  WebSocket received message {message_count} (Type: {msg_type}, SessionID: {session_id}):"
-            )
+            msg_type = WebSocketClient.get_message_type(message)
+            print(f"  [{message_count}] {msg_type.upper()}: ", end="")
 
-            if msg_type == "text":
-                source = message.get("source", "N/A")
-                content = message.get("content", "No content")
-                print(f"    Source: {source}, Content: {content[:100]}...")
-            elif msg_type == "pong":
-                timestamp = message.get("timestamp", "N/A")
-                print(f"    Pong received at timestamp: {timestamp}")
-            elif (
-                msg_type == "input"
-            ):  # Server sends input messages back for confirmation
-                input_type = message.get("data", {}).get("input_type", "N/A")
-                content = message.get("content", "No content")
-                print(f"    Input type: {input_type}, Content: {content[:100]}...")
+            # Print browser info for non-control messages
+            should_print_browser = msg_type not in [
+                MessageType.PLAN,
+                MessageType.PING,
+                MessageType.PONG,
+            ]
+
+            if msg_type == MessageType.TEXT:
+                content = message.get("content", "")[:100]
+                source = message.get("source", "unknown")
+                print(f"{source} - {content}...")
+                if should_print_browser:
+                    print_browser_info()
+
+            elif msg_type == MessageType.PLAN:
+                content = message.get("content", "")
+                print(f"{content}")
+
+            elif msg_type == MessageType.INPUT:
+                print(f"    WebSocket connected: {ws_client.connected}")
+                request_id = WebSocketClient.get_request_id(message)
+                print(f"    Extracted request_id: {request_id}")
+
+                if request_id:
+                    try:
+                        acceptance_message = (
+                            WebSocketClient.create_plan_acceptance_response(request_id)
+                        )
+                        print(f"    Generated acceptance message: {acceptance_message}")
+
+                        # Check message format
+                        try:
+                            import json
+
+                            message_json = json.dumps(acceptance_message)
+                            print(f"    Message JSON length: {len(message_json)}")
+                        except Exception as json_error:
+                            print(f"    JSON serialization error: {json_error}")
+                            return
+
+                        if not ws_client.connected:
+                            print("    WebSocket not connected, cannot send message")
+                            return
+
+                        ws_client.send_message(acceptance_message)
+                        print(f"Auto-accepted plan (ID: {request_id[:8]}...)")
+                    except Exception as e:
+                        print(f"Failed to accept plan: {e}")
+                        print(f"Request ID: {request_id}")
+                        print(f"Message keys: {list(message.keys())}")
+                        print(f"Message.message: {message.get('message', 'NOT_FOUND')}")
+                        import traceback
+
+                        traceback.print_exc()
+                else:
+                    print("Input request (no ID)")
+                    print(f"Message keys: {list(message.keys())}")
+                    print(f"Message.message: {message.get('message', 'NOT_FOUND')}")
+                if should_print_browser:
+                    print_browser_info()
+
+            elif msg_type == MessageType.RICH:
+                action = (
+                    message.get("message", {}).get("data", {}).get("action", "unknown")
+                )
+                print(f"Browser action: {action}")
+                if should_print_browser:
+                    print_browser_info()
+
+            elif msg_type == MessageType.TASK_RESULT:
+                content = message.get("content", "")
+                print(f"Task result: {content}")
+                if should_print_browser:
+                    print_browser_info()
+
+            elif msg_type == MessageType.PONG:
+                print("Heartbeat response")
+
             else:
-                # For other message types, print the whole message for inspection
-                print(f"    Full message: {message}")
+                print(f"Unhandled type: {msg_type}")
+                if should_print_browser:
+                    print_browser_info()
 
-        def on_connect():
-            print("  WebSocket connected successfully")
-
-        def on_disconnect():
-            print("  WebSocket disconnected")
-
-        def on_error(error):
-            print(f"  WebSocket error: {error}")
-
-        # Create WebSocket client
         ws_client = WebSocketClient(
             base_url=client.base_url,
             api_key=client.api_key,
-            session_id=session_id,
+            session_id=session.session_id,
             heartbeat_interval=30,
         )
 
-        # Set event handlers
         ws_client.set_message_handler(on_message)
-        ws_client.set_connect_handler(on_connect)
-        ws_client.set_disconnect_handler(on_disconnect)
-        ws_client.set_error_handler(on_error)
+        ws_client.set_connect_handler(lambda: print("  ✓ WebSocket connected"))
+        ws_client.set_disconnect_handler(lambda: print("  ✗ WebSocket disconnected"))
+        ws_client.set_error_handler(lambda e: print(f"  ⚠ WebSocket error: {e}"))
 
-        # Connect
-        print("  Connecting to WebSocket...")
-        ws_client.connect(session_id)
+        print("  Connecting...")
+        ws_client.connect(session.session_id)
+        time.sleep(3)
 
-        # Wait for connection
+        if not ws_client.connected:
+            print("  Failed to connect!")
+            return
+
+        print("  ✓ Ready for interaction")
+        current_round = 1
+
+        initial_task = input("Enter your task: ").strip()
+        if not initial_task:
+            initial_task = "tell me a joke"
+
+        start_message = {
+            "type": MessageType.START,
+            "data": {
+                "messages": [{"type": "task", "content": initial_task}],
+                "attachments": [],
+                "team_id": session.team_id,
+                "session_round": current_round,
+            },
+        }
+        ws_client.send_message(start_message)
+        print(f"  → Started task: {initial_task}")
         time.sleep(5)
 
-        if ws_client.connected:
-            print("  WebSocket connected. Starting interactive session...")
+        while True:
+            user_input = input(f"[{current_round}] > ").strip()
 
-            current_round = 1
+            if user_input.lower() in ["exit", "quit", "q"]:
+                break
 
-            # Get initial task from user
-            initial_task = input(
-                "Enter your initial task (e.g., 'please tell me a joke about weather'): "
-            )
-            if not initial_task:
-                initial_task = "please tell me a joke about weather"
-                print(f"No initial task entered, using default: '{initial_task}'")
+            if user_input.lower() == "stop":
+                ws_client.send_stop()
+                print("  → Stop command sent")
+                time.sleep(3)
+                continue
 
-            # 1. Send 'start' message with user's initial task
-            start_message = {
-                "type": "start",
+            if not user_input:
+                time.sleep(5)
+                continue
+
+            current_round += 1
+            input_message = {
+                "type": MessageType.INPUT,
                 "data": {
-                    "messages": [{"type": "task", "content": initial_task}],
+                    "input_type": "text",
+                    "text": user_input,
+                    "request_id": str(uuid.uuid4()),
                     "attachments": [],
                     "session_round": current_round,
                 },
             }
-            ws_client.send_message(start_message)
-            print("  Sent 'start' message with initial task.")
-            time.sleep(60)  # Increased wait time for initial responses
+            ws_client.send_message(input_message)
+            print(f"  → Sent: {user_input}")
+            time.sleep(5)
 
-            while True:
-                user_input = input(
-                    f"[{current_round}] Your message (type 'exit' or 'quit' to end): "
-                )
-                if user_input.lower() in ["exit", "quit"]:
-                    print("Ending interactive session.")
-                    break
-
-                current_round += 1
-                input_message = {
-                    "type": "input",
-                    "data": {
-                        "input_type": "text",
-                        "text": user_input,
-                        "request_id": str(uuid.uuid4()),
-                        "attachments": [],
-                        "session_round": current_round,
-                    },
-                }
-                ws_client.send_message(input_message)
-                print(f"  Sent 'input' message for turn {current_round}.")
-                time.sleep(60)  # Wait for AI response
-
-            # No explicit 'stop' message is sent, relying on function exit to close connection
-
-        # Disconnect
-        print("  Disconnecting WebSocket...")
         ws_client.disconnect()
-
-        print(f"  WebSocket demo completed - received {message_count} messages.")
+        print(f"  Session completed ({message_count} messages)")
 
     except Exception as e:
-        print(f"  Error in WebSocket operations: {e}")
+        print(f"  Error: {e}")
+        import traceback
+
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

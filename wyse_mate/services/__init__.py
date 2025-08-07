@@ -1,7 +1,5 @@
 """
 Services package for the Mate SDK Python.
-
-This package contains all service classes for different API domains.
 """
 
 from .agent import AgentService
