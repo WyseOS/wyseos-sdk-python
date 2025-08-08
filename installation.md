@@ -1,226 +1,100 @@
 # Installation Guide
 
-This guide walks you through installing and setting up the Mate SDK Python.
+Install and set up the Mate SDK Python.
 
 ## Requirements
 
-- **Python**: 3.9 or higher
-- **Operating System**: Windows, macOS, or Linux
-- **Dependencies**: All required dependencies are automatically installed
+- Python 3.9+
+- Windows, macOS, or Linux
 
-## Installation Methods
-
-### 1. Install from PyPI (Recommended)
+## Install
 
 ```bash
 pip install wyse-mate-sdk
 ```
 
-### 2. Install from Source
+## From Source
 
 ```bash
-# Clone the repository
-git clone https://github.com/wyse/matego.git
-cd matego/sdk/python
-
-# Install in development mode
+git clone https://github.com/WyseOS/mate-sdk-python
+cd mate-sdk-python
 pip install -e .
 ```
 
-### 3. Install with Poetry
-
-```bash
-poetry add wyse-mate-sdk
-```
-
-### 4. Install with conda
-
-```bash
-conda install -c conda-forge wyse-mate-sdk
-```
-
-## Verify Installation
-
-After installation, verify that the SDK is working correctly:
+## Verify
 
 ```python
 import wyse_mate
+from wyse_mate import Client
+from wyse_mate.config import load_config
 
-# Check version
 print(f"Mate SDK Python version: {wyse_mate.__version__}")
-
-# Test basic imports
-from wyse_mate import Client, ClientOptions
-from wyse_mate.models import TeamInfo
-from wyse_mate.errors import APIError
-
+client = Client(load_config())
 print("✅ Installation successful!")
 ```
 
 ## Dependencies
 
-The SDK automatically installs these dependencies:
+Automatically installed:
 
-- **requests** (≥2.31.0) - HTTP client library
-- **pydantic** (≥2.0.0) - Data validation and serialization
-- **websockets** (≥11.0.0) - WebSocket client
-- **PyYAML** (≥6.0.0) - YAML configuration support
+- requests ≥ 2.31.0
+- pydantic ≥ 2.0.0
+- websockets ≥ 11.0.0
+- PyYAML ≥ 6.0.0
 
-## Virtual Environment (Recommended)
+## Configuration
 
-We recommend using a virtual environment to avoid dependency conflicts:
-
-### Using venv
-
-```bash
-# Create virtual environment
-python -m venv mate-sdk-env
-
-# Activate (Linux/macOS)
-source mate-sdk-env/bin/activate
-
-# Activate (Windows)
-mate-sdk-env\Scripts\activate
-
-# Install SDK
-pip install wyse-mate-sdk
-```
-
-### Using conda
-
-```bash
-# Create conda environment
-conda create -n mate-sdk python=3.9
-
-# Activate environment
-conda activate mate-sdk
-
-# Install SDK
-pip install wyse-mate-sdk
-```
-
-## Development Installation
-
-If you plan to contribute to the SDK or need the latest development version:
-
-```bash
-# Clone repository
-git clone https://github.com/wyse/matego.git
-cd matego/sdk/python
-
-# Install development dependencies
-pip install -e ".[dev]"
-
-# Or install manually
-pip install -e .
-pip install pytest pytest-cov black isort flake8 mypy
-```
-
-## Configuration Setup
-
-After installation, you'll need to configure your API credentials:
-
-### Configuration File (Recommended)
-
-Create a `mate.yaml` configuration file in your project root:
+Create `mate.yaml` in your project root:
 
 ```yaml
-api_key: "your-api-key-here"
+api_key: "your-api-key"
 base_url: "https://api.mate.wyseos.com"
 timeout: 30
 debug: false
 ```
 
-### Python Code Configuration
+Load configuration:
 
 ```python
 from wyse_mate import Client, ClientOptions
-from wyse_mate.config import load_default_config
-
-# Method 1: Load from mate.yaml (recommended)
-config = load_default_config()
-if config:
-    client = Client(config)
-else:
-    print("No mate.yaml found, using manual configuration")
-    client = Client(ClientOptions(api_key="your-api-key"))
-
-# Method 2: Manual configuration
-client = Client(ClientOptions(
-    api_key="your-api-key-here",
-    base_url="https://api.mate.wyseos.com",
-    timeout=30,
-    debug=False
-))
-
-# Method 3: Load from custom path
 from wyse_mate.config import load_config
-config = load_config("custom-config.yaml")
-client = Client(config)
+
+try:
+    client = Client(load_config())
+except Exception:
+    client = Client(ClientOptions(api_key="your-api-key"))
 ```
 
-## Next Steps
+## Virtual Environment (Recommended)
 
-- [Quick Start Guide](quickstart.md) - Get started with basic usage
+### venv
+
+```bash
+python -m venv mate-sdk-env
+# macOS/Linux
+source mate-sdk-env/bin/activate
+# Windows
+# mate-sdk-env\Scripts\activate
+pip install wyse-mate-sdk
+```
+
+### conda
+
+```bash
+conda create -n mate-sdk python=3.9
+conda activate mate-sdk
+pip install wyse-mate-sdk
+```
 
 ## Troubleshooting
 
-### Common Issues
+- **ImportError: No module named 'wyse_mate'**: Ensure the environment is activated and the package is installed.
+- **ConfigError: Configuration file not found: mate.yaml**: Create `mate.yaml` or pass a custom path to `load_config`.
+- **SSLCertificateError**: Update certificates or configure SSL appropriately in your environment.
+- **Invalid YAML**: Ensure proper YAML syntax and indentation.
 
-**Import Error**
-```
-ImportError: No module named 'wyse_mate'
-```
-**Solution**: Ensure you've installed the package and activated your virtual environment.
+## Getting Help
 
-**Configuration Error**
-```
-ConfigError: Configuration file not found: mate.yaml
-```
-**Solution**: Create a `mate.yaml` file in your project root or use manual configuration.
-
-**SSL Certificate Error**
-```
-SSLCertificateError: [SSL: CERTIFICATE_VERIFY_FAILED]
-```
-**Solution**: Update your certificates or configure SSL verification in ClientOptions.
-
-**Permission Error on Installation**
-```
-PermissionError: [Errno 13] Permission denied
-```
-**Solution**: Use `pip install --user wyse-mate-sdk` or use a virtual environment.
-
-**YAML Parse Error**
-```
-ConfigError: Invalid YAML in configuration file
-```
-**Solution**: Check your YAML syntax. Use proper indentation and quotes for string values.
-
-### Configuration Validation
-
-The SDK validates your configuration on startup. Common validation errors:
-
-**Missing API Key**
-```python
-# This will raise a validation error
-client = Client(ClientOptions(api_key=""))
-```
-
-**Invalid Base URL**
-```python
-# This will raise a validation error
-client = Client(ClientOptions(base_url="invalid-url"))
-```
-
-**Invalid Timeout**
-```python
-# This will raise a validation error
-client = Client(ClientOptions(timeout=0))
-```
-
-### Getting Help
-
-- [GitHub Issues](https://github.com/wyse/matego/issues)
-- [Documentation](./README.md)
-- [Support Email](mailto:info@wyseos.com) 
+- Issues: https://github.com/WyseOS/mate-sdk-python/issues
+- Docs: `README.md`
+- Support: info@wyseos.com 

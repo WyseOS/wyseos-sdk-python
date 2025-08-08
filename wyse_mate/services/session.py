@@ -124,7 +124,6 @@ class SessionService:
         total_count = pagination_data.get("total", 0)
         current_page_num = pagination_data.get("page_num", 1)
         current_page_size = pagination_data.get("page_size", 20)
-        total_pages = pagination_data.get("total_page", 0)
         has_next = current_page_num * current_page_size < total_count
         has_prev = current_page_num > 1
 

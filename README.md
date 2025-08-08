@@ -1,21 +1,19 @@
 # Mate SDK Python 
 
-[![Python SDK CI/CD](https://github.com/wyse/matego/actions/workflows/python-sdk-ci.yml/badge.svg)](https://github.com/wyse/matego/actions/workflows/python-sdk-ci.yml)
+[![Python SDK CI/CD](https://github.com/WyseOS/mate-sdk-python/actions/workflows/python-sdk-ci.yml/badge.svg)](https://github.com/WyseOS/mate-sdk-python/actions/workflows/python-sdk-ci.yml)
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/downloads/)
 [![PyPI Package](https://img.shields.io/badge/PyPI-wyse--mate--sdk-blue)](https://pypi.org/project/wyse-mate-sdk/)
 [![Documentation](https://img.shields.io/badge/docs-comprehensive-green)](./README.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-Mate SDK Python for interacting with the Mate API. Built with modern Python practices, type safety, and enterprise-grade features.
+Mate SDK Python for interacting with the Mate API. Built with modern Python practices, type safety, and real-time support.
 
 ## 🚀 Features
 
-- **🎯 Type Safe**: Full type annotations with Pydantic validation
-- **⚡ Async Support**: WebSocket client with real-time communication
-- **🔧 Flexible Configuration**: Configuration files (JSON, YAML) support
-- **🛡️ Robust Error Handling**: Comprehensive exception hierarchy
-- **🔒 Enterprise Security**: Built-in security scanning and validation
-- **🚀 Production Ready**: CI/CD pipeline with automated testing
+- **🎯 Type Safe**: Pydantic models and validation
+- **⚡ Real-time**: WebSocket client
+- **🔧 Simple Config**: YAML config file support
+- **🛡️ Robust Errors**: Clear, structured exceptions
 
 ## 📦 Installation
 
@@ -26,40 +24,37 @@ pip install wyse-mate-sdk
 ## 🏃‍♂️ Quick Start
 
 ```python
-from wyse_mate import Client
-from wyse_mate.config import load_default_config
+from wyse_mate import Client, ClientOptions
+from wyse_mate.config import load_config
 
-# Initialize client using configuration file
-config = load_default_config()
-client = Client(config)
+# Initialize using mate.yaml (in CWD)
+client = Client(load_config())
 
-# List your teams
-teams = client.team.list_teams()
-print(f"Found {len(teams.teams)} teams")
+# List teams
+from wyse_mate.models import ListOptions
+teams = client.team.get_list(options=ListOptions(page_num=1, page_size=10))
+print(f"Found {teams.total} teams")
 
-# Create a session and send a message
-session = client.session.create_session({
-    "team_id": teams.teams[0].team_id,
-    "title": "My Session"
-})
+# Create a session and read messages
+from wyse_mate.models import CreateSessionRequest
+session = client.session.create(CreateSessionRequest(team_id="your-team-id", task="My task"))
+info = client.session.get_info(session.session_id)
+msgs = client.session.get_messages(session.session_id, page_num=1, page_size=20)
+print(info.status, msgs.total_count)
 
-response = client.session.send_message(
-    session.session.session_id,
-    {"content": "Hello, Mate!"}
-)
-print(f"Response: {response.content}")
+# WebSocket (Real Time)
+from wyse_mate.websocket import WebSocketClient
+ws = WebSocketClient(base_url=client.base_url, api_key=client.api_key, session_id=info.session_id)
+ws.set_message_handler(lambda m: print(m))
+ws.connect(info.session_id)
 ```
 
 ## 📚 Documentation
 
-Comprehensive documentation is available:
-
-- **[Installation Guide](./installation.md)** - Installation and setup
-- **[Quick Start Guide](./quickstart.md)** - Get up and running in minutes
+- **[Installation Guide](./installation.md)**
+- **[Quick Start Guide](./quickstart.md)**
 
 ## 🔧 Configuration
-
-### Configuration File
 
 Create `mate.yaml`:
 
@@ -73,119 +68,91 @@ debug: false
 Load configuration:
 
 ```python
+from wyse_mate import Client
 from wyse_mate.config import load_config
 
-config = load_config("mate.yaml")
-client = Client(config)
+client = Client(load_config("mate.yaml"))
 ```
 
-## 🌟 Core Components
+## 🌟 Client Services
 
-### Client Services
+- `client.user` — API key management
+- `client.team` — Team retrieval
+- `client.agent` — Agent retrieval
+- `client.session` — Session create/info/messages
+- `client.browser` — Browser info/pages/release
 
-- **`client.user`** - User and API key management
-- **`client.team`** - Team creation and management
-- **`client.agent`** - AI agent configuration
-- **`client.session`** - Session and message handling
-- **`client.browser`** - Browser automation
+## 🧩 Models and Pagination
 
-### WebSocket Support
+- `ListOptions(page_num, page_size)`
+- Most list endpoints return `PaginatedResponse[T]` with `data`, `total`, `page_num`, `page_size`, `total_page`.
+
+## 🔌 WebSocket
 
 ```python
-from wyse_mate.websocket import WebSocketClient
-from wyse_mate.config import load_default_config
+from wyse_mate.websocket import WebSocketClient, MessageType
 
-# Load configuration
-config = load_default_config()
+ws = WebSocketClient(base_url=client.base_url, api_key=client.api_key, session_id="your-session-id")
+ws.set_connect_handler(lambda: print("Connected"))
+ws.set_disconnect_handler(lambda: print("Disconnected"))
+ws.set_message_handler(lambda m: print(m))
+ws.connect("your-session-id")
 
-ws_client = WebSocketClient(
-    base_url="wss://api.mate.wyseos.com",
-    api_key=config.api_key,
-    session_id="your-session-id"
-)
-
-ws_client.set_message_handler(lambda msg: print(f"Received: {msg}"))
-ws_client.connect()
-ws_client.send_message({"content": "Hello via WebSocket!"})
+# Start a task
+ws.send_message({
+    "type": MessageType.START,
+    "data": {
+        "messages": [{"type": "task", "content": "Do something"}],
+        "attachments": [],
+        "team_id": "your-team-id",
+        "kb_ids": [],
+    },
+})
 ```
 
 ## 🛠️ Development
 
-### Requirements
-
-- Python 3.9+
-- Modern dependencies (requests, pydantic, websockets, PyYAML)
-
-### Development Setup
-
 ```bash
 # Clone repository
-git clone https://github.com/wyse/matego.git
-cd matego/sdk/python
+git clone https://github.com/WyseOS/mate-sdk-python
+cd mate-sdk-python
 
 # Install in development mode
 pip install -e .
 
-# Install development dependencies
+# Optional development tools
 pip install pytest pytest-cov black isort flake8 mypy
 ```
 
-### Code Quality
-
-The project uses modern Python development tools:
-
-- **Black** - Code formatting
-- **isort** - Import sorting
-- **flake8** - Linting
-- **mypy** - Type checking
-- **pytest** - Testing framework
-
-### CI/CD Pipeline
-
-Automated workflows include:
-
-- ✅ **Code Quality** - Formatting, linting, type checking
-- ✅ **Security Scanning** - Dependency and code security
-- ✅ **Multi-Python Testing** - Python 3.9, 3.10, 3.11, 3.12
-- ✅ **Documentation** - Automated docs generation
-- ✅ **Package Building** - PyPI-ready package creation
-- ✅ **Automated Releases** - Tagged release publishing
-
 ## 📊 Project Status
 
-**Overall Completion: 95%** ✅
-
-- ✅ **Core Implementation** - Complete
-- ✅ **Documentation** - Core documentation available
-- ✅ **CI/CD Pipeline** - Enterprise-grade
-- ✅ **Security** - Multi-layer scanning
-- ❌ **Testing** - Unit tests needed
+- Core implementation: ✅
+- Documentation: ✅
+- Tests: 🚧
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1. Fork
+2. Create a branch
+3. Commit
+4. Push
+5. Open a PR
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License — see `LICENSE`.
 
 ## 🆘 Support
 
-- **Issues**: [GitHub Issues](https://github.com/wyse/matego/issues)
-- **Email**: support@wyseos.com
+- Issues: https://github.com/WyseOS/mate-sdk-python/issues
+- Email: support@wyseos.com
 
 ## 🔗 Links
 
-- [PyPI Package](https://pypi.org/project/wyse-mate-sdk/)
-- [API Documentation](https://docs.wyseos.com)
-- [Wyse Website](https://wyseos.com)
+- PyPI: https://pypi.org/project/wyse-mate-sdk/
+- API Docs: https://docs.wyseos.com
+- Website: https://wyseos.com
 
----
+—
 
-**Ready for Production** 🚀
-
-The Mate SDK Python is production-ready and actively maintained. Start building amazing applications today!
+Ready for production. Build with Mate SDK Python.
