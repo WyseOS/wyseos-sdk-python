@@ -4,6 +4,9 @@ Constants for the Wyse Mate Python SDK.
 This module contains all constants used throughout the SDK.
 """
 
+# Default configuration file
+DEFAULT_CONFIG_FILE = "mate.yaml"
+
 # Default Configuration
 DEFAULT_BASE_URL = "https://api.mate.wyseos.com"
 DEFAULT_USER_AGENT = "WyseMatePython/0.1.0"

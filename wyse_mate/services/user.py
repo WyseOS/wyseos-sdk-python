@@ -47,7 +47,6 @@ class UserService:
         """
         params = {}
         if options:
-            # Convert ListOptions to dict with correct parameter names
             if options.page_num > 0:
                 params["page_num"] = str(options.page_num)
             else:

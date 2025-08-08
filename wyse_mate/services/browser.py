@@ -80,7 +80,6 @@ class BrowserService:
                 message=resp.get("msg", "Unknown error"), code=resp.get("code")
             )
 
-        # Extract the actual data from the nested 'data' field
         browsers_data = resp.get("data", {})
 
         return ListBrowsersResponse.model_validate(browsers_data)
