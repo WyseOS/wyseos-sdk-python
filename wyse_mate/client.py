@@ -19,7 +19,7 @@ from .constants import (
     HEADER_CONTENT_TYPE,
     HEADER_USER_AGENT,
 )
-from .errors import _handle_api_error
+from .errors import APIError
 from .services.agent import AgentService
 from .services.browser import BrowserService
 from .services.session import SessionService
@@ -68,8 +68,10 @@ class Client:
                 method=method, url=url, headers=headers, json=body, timeout=self.timeout
             )
 
-            if response.status_code >= 400:
-                _handle_api_error(response)
+            if response.status_code != 200:
+                raise APIError(
+                    message="Request failed", status_code=response.status_code
+                )
 
             return response
 
@@ -109,8 +111,6 @@ class Client:
             api_response = response_data
             if api_response.get("code") != 0:
                 message = api_response.get("msg", "Unknown error")
-                from .errors import APIError
-
                 raise APIError(message=message, code=api_response.get("code"))
 
             data = api_response.get("data", {})

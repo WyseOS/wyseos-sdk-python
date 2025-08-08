@@ -3,7 +3,7 @@ Data models for the Wyse Mate Python SDK.
 """
 
 from datetime import datetime
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Annotated, Any, Dict, Generic, List, Optional, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -22,7 +22,7 @@ class ModelInfo(BaseModel):
     updated_at: str = Field(alias="updated_at")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class TeamType(str):
@@ -40,7 +40,7 @@ class AgentParameters(BaseModel):
     temperature: float = Field(alias="temperature")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class TeamParameters(BaseModel):
@@ -52,7 +52,7 @@ class TeamParameters(BaseModel):
     temperature: float = Field(alias="temperature")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class AgentInfo(BaseModel):
@@ -72,7 +72,7 @@ class AgentInfo(BaseModel):
     updated_at: datetime = Field(alias="updated_at")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class TeamInfo(BaseModel):
@@ -94,7 +94,7 @@ class TeamInfo(BaseModel):
     deleted_at: int = Field(alias="deleted_at")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class Attachments(BaseModel):
@@ -111,7 +111,7 @@ class Attachments(BaseModel):
     updated_at: str = Field(alias="updated_at")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class UserTaskMessage(BaseModel):
@@ -137,7 +137,7 @@ class MessageResponse(BaseModel):
     session_round: int = Field(alias="session_round")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class SessionInfo(BaseModel):
@@ -161,7 +161,7 @@ class SessionInfo(BaseModel):
     updated_at: str = Field(alias="updated_at")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class BrowserPageInfo(BaseModel):
@@ -177,7 +177,7 @@ class BrowserPageInfo(BaseModel):
     debugger_host: str = Field(alias="debugger_host")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class BrowserInfo(BaseModel):
@@ -198,7 +198,7 @@ class BrowserInfo(BaseModel):
     pages: List[BrowserPageInfo] = Field(default_factory=list)
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class APIKey(BaseModel):
@@ -211,12 +211,12 @@ class APIKey(BaseModel):
     last_used_at: datetime = Field(alias="last_used_at")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 # Request/Response Types
 class APIResponse(BaseModel, Generic[T]):
-    """通用API响应模型，适用于{code, msg, data}结构。"""
+    """API response model."""
 
     code: int
     msg: str
@@ -224,7 +224,7 @@ class APIResponse(BaseModel, Generic[T]):
 
 
 class PaginatedResponse(BaseModel, Generic[T]):
-    """通用分页响应模型，适用于所有分页列表接口。"""
+    """Paginated response model."""
 
     page_num: int
     page_size: int
@@ -265,16 +265,14 @@ class CreateAgentRequest(BaseModel):
 class CreateSessionRequest(BaseModel):
     """Request to create a new session (matches Go API)."""
 
-    team_id: str = Field(alias="team_id")
-    task: Optional[str] = Field(default="", description="The task for the session")
+    team_id: Annotated[str, Field(min_length=1, description="Team ID for the session")]
+    task: Annotated[str, Field(min_length=1, description="Task for the session")]
 
 
 class CreateAPIKeyRequest(BaseModel):
     """Request to create a new API key."""
 
     name: str
-    scopes: List[str] = Field(default_factory=list)
-    expires_at: Optional[datetime] = Field(default=None, alias="expires_at")
 
 
 # Specific Response Types
@@ -331,7 +329,7 @@ class GetMessagesResponse(BaseModel):
 class MessageFilter(BaseModel):
     """Filter for session messages."""
 
-    role: Optional[str] = None  # "user", "assistant", "system"
+    role: Optional[str] = None
     content: Optional[str] = None
     from_timestamp: Optional[datetime] = None
     to_timestamp: Optional[datetime] = None

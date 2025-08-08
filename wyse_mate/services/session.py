@@ -56,8 +56,7 @@ class SessionService:
             body=request.dict(exclude_none=True),
             result_model=dict,
         )
-        print(ENDPOINT_SESSION_CREATE)
-        print(resp)
+
         if resp.get("code") != 0:
             from ..errors import APIError
 

@@ -4,8 +4,6 @@ Custom exception classes for the Wyse Mate Python SDK.
 
 from typing import Any, Dict, Optional
 
-import requests
-
 
 class APIError(Exception):
     """Base exception for API errors."""
@@ -161,93 +159,3 @@ class ServerError(APIError):
 
     def __init__(self, message: str = "Internal server error", **kwargs):
         super().__init__(message, **kwargs)
-
-
-def _handle_api_error(response: requests.Response) -> None:
-    status_code = response.status_code
-    request_id = response.headers.get("X-Request-ID")
-
-    try:
-        error_data = response.json()
-        message = error_data.get("msg", "Unknown error")
-        code = error_data.get("code")
-        details = error_data.get("details", {})
-
-    except (ValueError, KeyError):
-        message = f"HTTP {status_code}: {response.reason}"
-        code = None
-        details = {}
-
-    if status_code == 400:
-        if "validation" in message.lower() or "invalid" in message.lower():
-            field = details.get("field")
-            raise ValidationError(
-                message=message,
-                field=field,
-                code=code,
-                status_code=status_code,
-                details=details,
-                request_id=request_id,
-            )
-        else:
-            raise APIError(
-                message=message,
-                code=code,
-                status_code=status_code,
-                details=details,
-                request_id=request_id,
-            )
-
-    elif status_code == 401:
-        raise AuthenticationError(
-            message=message,
-            code=code,
-            status_code=status_code,
-            details=details,
-            request_id=request_id,
-        )
-
-    elif status_code == 403:
-        raise AuthorizationError(
-            message=message,
-            code=code,
-            status_code=status_code,
-            details=details,
-            request_id=request_id,
-        )
-
-    elif status_code == 404:
-        raise NotFoundError(
-            message=message,
-            code=code,
-            status_code=status_code,
-            details=details,
-            request_id=request_id,
-        )
-
-    elif status_code == 429:
-        raise RateLimitError(
-            message=message,
-            code=code,
-            status_code=status_code,
-            details=details,
-            request_id=request_id,
-        )
-
-    elif status_code >= 500:
-        raise ServerError(
-            message=message,
-            code=code,
-            status_code=status_code,
-            details=details,
-            request_id=request_id,
-        )
-
-    else:
-        raise APIError(
-            message=message,
-            code=code,
-            status_code=status_code,
-            details=details,
-            request_id=request_id,
-        )

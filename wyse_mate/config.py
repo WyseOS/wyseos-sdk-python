@@ -16,14 +16,13 @@ from pydantic import BaseModel, Field, validator
 
 from .constants import (
     DEFAULT_BASE_URL,
+    DEFAULT_CONFIG_FILE,
     DEFAULT_TIMEOUT,
     DEFAULT_USER_AGENT,
 )
 from .errors import ConfigError
 
 T = TypeVar("T", bound=BaseModel)
-
-DEFAULT_CONFIG_FILE = "mate.yaml"
 
 
 class ClientOptions(BaseModel):
