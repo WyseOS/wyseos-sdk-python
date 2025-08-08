@@ -32,6 +32,12 @@ class PlanStatus(str, Enum):
     ERROR = "error"
 
 
+class PlanOverallStatus(str, Enum):
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    FINISHED = "finished"
+
+
 class PlanStep(BaseModel):
     """A single plan step that can optionally contain sub-steps.
 
@@ -64,10 +70,6 @@ class PlanStep(BaseModel):
         if self.title and self.description and self.description != self.title:
             lines.append(f"{indent}  - {self.description}")
 
-        # Show agents if present
-        if self.agents:
-            lines.append(f"{indent}  agents: {', '.join(self.agents)}")
-
         # Recurse into sub-steps
         for child in self.steps:
             lines.extend(child.render_lines(indent_level + 1))
@@ -89,6 +91,29 @@ class Plan(BaseModel):
     def is_nested(self) -> bool:
         """True if any root item contains sub-steps."""
         return any(len(step.steps) > 0 for step in self.items)
+
+    def get_overall_status(self) -> PlanOverallStatus:
+        """Return overall status of the plan.
+
+        - NOT_STARTED: all top-level steps are not_started (or no items)
+        - FINISHED: all leaf steps are in terminal states (done/skipped/error)
+        - IN_PROGRESS: otherwise
+        """
+        if not self.items:
+            return PlanOverallStatus.NOT_STARTED
+
+        # Check top-level not started
+        if all(step.status == PlanStatus.NOT_STARTED for step in self.items):
+            return PlanOverallStatus.NOT_STARTED
+
+        # Determine finished based on leaves (last-level tasks)
+        leaves = self.leaves()
+        if leaves:
+            terminal = {PlanStatus.DONE, PlanStatus.SKIPPED, PlanStatus.ERROR}
+            if all(step.status in terminal for step in leaves):
+                return PlanOverallStatus.FINISHED
+
+        return PlanOverallStatus.IN_PROGRESS
 
     def find(self, step_id: str) -> Optional[PlanStep]:
         """Find a step by id (depth-first)."""
@@ -163,11 +188,92 @@ class Plan(BaseModel):
 
     @classmethod
     def from_message(cls, message: Any) -> "Plan":
-        """Build a Plan from a message payload."""
+        """Build a Plan from a message payload (initial plan only)."""
         items_raw = cls._coerce_to_items(message)
         items = [PlanStep.model_validate(item) for item in items_raw]
-
         return cls(items=items)
+
+    @staticmethod
+    def is_update_message(message: Any) -> bool:
+        """Return True if the payload looks like a plan update (not a full plan)."""
+        if not isinstance(message, dict):
+            return False
+        msg = message.get("message")
+        if not isinstance(msg, dict):
+            return False
+        msg_type = msg.get("type")
+        if isinstance(msg_type, str) and msg_type == "update_task_status":
+            return True
+        # If message.data is a dict (single task), treat as update
+        data = msg.get("data") if isinstance(msg, dict) else None
+        return isinstance(data, dict)
+
+    def _ensure_step(self, step_like: Dict[str, Any]) -> PlanStep:
+        """Ensure a step with given id exists; create or update and return it."""
+        step_id = str(step_like.get("id")) if step_like.get("id") is not None else None
+        if not step_id:
+            # If no id, generate a simple deterministic id from title
+            title = step_like.get("title") or step_like.get("description") or "unnamed"
+            step_id = title
+        existing = self.find(step_id)
+        if existing:
+            # Update simple fields
+            if "title" in step_like and step_like["title"]:
+                existing.title = step_like["title"]
+            if "description" in step_like and step_like["description"]:
+                existing.description = step_like["description"]
+            if "agents" in step_like and isinstance(step_like["agents"], list):
+                existing.agents = list(step_like["agents"])
+            if "status" in step_like and step_like["status"]:
+                try:
+                    existing.status = PlanStatus(step_like["status"])  # may raise
+                except Exception:
+                    pass
+            return existing
+        # Create new leaf step when not found
+        new_step_data: Dict[str, Any] = {
+            "id": step_id,
+            "title": step_like.get("title"),
+            "description": step_like.get("description"),
+            "agents": step_like.get("agents") or [],
+        }
+        if step_like.get("status"):
+            try:
+                new_step_data["status"] = PlanStatus(step_like["status"])  # type: ignore
+            except Exception:
+                pass
+        new_step = PlanStep.model_validate(new_step_data)
+        self.items.append(new_step)
+        return new_step
+
+    def apply_message(self, message: Any) -> bool:
+        """Apply a plan-related message to this instance.
+
+        - If it's an initial/full plan, replace items with provided steps.
+        - If it's an update (single task dict), update or create the step by id.
+        Returns True if any state was changed.
+        """
+        if not isinstance(message, dict):
+            return False
+
+        # Full plan
+        items_raw = self._coerce_to_items(message)
+        if items_raw:
+            self.items = [PlanStep.model_validate(item) for item in items_raw]
+            return True
+
+        # Update message
+        msg = message.get("message")
+        if not isinstance(msg, dict):
+            return False
+        data = msg.get("data")
+        if not isinstance(data, dict):
+            return False
+
+        before = self.render_text()
+        self._ensure_step(data)
+        after = self.render_text()
+        return before != after
 
     def to_message_data(self) -> List[Dict[str, Any]]:
         """Serialize back to the `message.data` shape (list of dicts)."""
