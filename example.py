@@ -29,29 +29,24 @@ def main():
         print("Using default configuration")
         client = Client(ClientOptions())
 
-    # various operations
-    # print("1. User API Keys Operations")
-    # user_operations(client)
+    print("1. User API Keys")
+    user_operations(client)
 
-    print("\n2. Team Operations")
+    print("\n2. Teams")
     team_operations(client)
 
-    # print("\n3. Agent Operations")
-    # team_id = agent_operations(client, None)
+    print("\n3. Agents")
+    agent_operations(client, None)
 
-    print("\n4. Session Operations")
+    print("\n4. Start New Session")
     # Ask for initial task BEFORE creating the session
-    initial_task = input("Enter your task: ").strip()
+    initial_task = input("Please enter your task: ").strip()
     if not initial_task:
         print("  Error: initial task is required")
         return
     session = session_operations(client, "wyse_mate", initial_task)
 
-    # print("\n5. Browser Operations")
-    # session_id = session.session_id if session else None
-    # browser_operations(client, session_id)
-
-    print("\n5. WebSocket Operations")
+    print("\n5. Setting up WebSocket connection")
     websocket_operations(client, session, initial_task)
 
 
@@ -62,48 +57,30 @@ def user_operations(client: Client):
     api_keys_page = client.user.list_api_keys(ListOptions(page_num=1, page_size=10))
     print(f"  Found {api_keys_page.total} API keys")
 
-    for key in api_keys_page.data[:3]:  # Show first 3
-        print(f"    - {key.name} (ID: {key.id})")
+    for key in api_keys_page.data:
+        print(f"    - {key.name}")
 
 
 def team_operations(client: Client):
     """team-related operations."""
 
     # List teams
-    print("  Listing teams...")
     teams_page = client.team.get_list("all", ListOptions(page_num=1, page_size=10))
     print(f"  Found {teams_page.total} teams")
 
-    for team in teams_page.data[:3]:  # Show first 3
+    for team in teams_page.data:
         print(f"    - {team.name} (ID: {team.team_id})")
-
-    # Get team details
-    if teams_page.data:
-        print(f"  Getting details for team: {teams_page.data[0].name}")
-        team_details = client.team.get_info(teams_page.data[0].team_id)
-        print(f"    Team type: {team_details.team_type}")
-        print(f"    Description: {team_details.description}")
 
 
 def agent_operations(client: Client, team_id: Optional[str]):
     """agent-related operations."""
 
     # List agents
-    print("  Listing agents...")
     agents_page = client.agent.get_list("all", ListOptions(page_num=1, page_size=10))
     print(f"  Found {agents_page.total} agents")
 
-    for agent in agents_page.data[:3]:  # Show first 3
+    for agent in agents_page.data:
         print(f"    - {agent.name} (ID: {agent.agent_id})")
-
-    # Get agent details
-    if agents_page.data:
-        print(f"  Getting details for agent: {agents_page.data[0].name}")
-        agent_details = client.agent.get_info(agents_page.data[0].agent_id)
-        print(f"    Agent type: {agent_details.agent_type}")
-        print(f"    Description: {agent_details.description}")
-
-    return agents_page.data[0].agent_id if agents_page.data else None
 
 
 def session_operations(client: Client, team_id: str, task: str):
@@ -124,42 +101,35 @@ def session_operations(client: Client, team_id: str, task: str):
 def websocket_operations(client: Client, session: SessionInfo, initial_task: str):
     """WebSocket interactive session with complete start-to-stop flow."""
 
-    # def print_browser_info():
-    #     """Print current browser information."""
-    #     try:
-    #         browsers = client.browser.list_browsers(session.session_id)
-    #         if browsers.browsers and len(browsers.browsers) > 0:
-    #             browser = browsers.browsers[0]
-    #             browser_details = client.browser.get_info(browser.browser_id)
-    #             pages = client.browser.list_browser_pages(browser.browser_id)
-    #             print(f"    Browser: {browser_details.status} | Pages: {pages.total}")
-    #         else:
-    #             print("    Browser: None active")
-    #     except Exception:
-    #         print("    Browser: Error retrieving info")
-
-    print("  Setting up WebSocket connection...")
     msg_list = []
+    plan_state: Optional[Plan] = None
 
     def on_message(message):
         msg_type = WebSocketClient.get_message_type(message)
         # print(json.dumps(message, ensure_ascii=False, indent=2))
 
         if msg_type == MessageType.TEXT:
-            content = message.get("content", "")[:100]
+            content = message.get("content", "")
             source = message.get("source", "unknown")
-            print(f"{source} - {content}...")
+            print(f"  {source} - {content}")
 
         elif msg_type == MessageType.PLAN:
             try:
-                plan = Plan.from_message(message)
-                print("Received Plan:")
-                print(plan.render_text())
+                nonlocal plan_state
+                if plan_state is None:
+                    plan_state = Plan()
+                changed = plan_state.apply_message(message)
+                if changed:
+                    print("Received Plan:")
+                    print(plan_state.render_text())
+                    print(f"Plan status: {plan_state.get_overall_status().value}")
+                else:
+                    print("Plan message received but no changes applied")
+                    print(f"Plan status: {plan_state.get_overall_status().value}")
             except Exception as e:
                 print(f"Failed to parse/print plan: {e}")
 
         elif msg_type == MessageType.INPUT:
-            print(f"    WebSocket connected: {ws_client.connected}")
             request_id = WebSocketClient.get_request_id(message)
 
             is_response_plan = msg_list[-1].get("type") == MessageType.PLAN
@@ -176,17 +146,15 @@ def websocket_operations(client: Client, session: SessionInfo, initial_task: str
                     print(f"Auto-accepted plan (ID: {request_id})")
                 except Exception as e:
                     print(f"Request ID: {request_id}. Failed to accept plan: {e}")
-                    import traceback
-
-                    traceback.print_exc()
             else:
-                print("Input request (no ID)")
-                print(f"Message keys: {list(message.keys())}")
-                print(f"Message.message: {message.get('message', 'NOT_FOUND')}")
+                print("Awaiting your input. Type 'exit' to leave the session.")
 
         elif msg_type == MessageType.RICH:
-            action = message.get("message", {}).get("data", {}).get("action", "unknown")
-            print(f"Browser action: {action}")
+            print("Browser Message:")
+            source = (message.get("source") or message.get("source_type") or "").lower()
+            inner_type = (message.get("message", {}).get("type") or "").lower()
+            if source == "wyse_browser" or inner_type == "browser":
+                client.browser.show_info(session.session_id, message)
 
         elif msg_type == MessageType.TASK_RESULT:
             content = message.get("content", "")
@@ -248,8 +216,6 @@ def websocket_operations(client: Client, session: SessionInfo, initial_task: str
         if not user_input:
             time.sleep(5)
             continue
-
-        # The code to send free-form input is commented out intentionally.
 
     ws_client.disconnect()
     print("  Session completed.")

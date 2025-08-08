@@ -204,7 +204,6 @@ class BrowserInfo(BaseModel):
 class APIKey(BaseModel):
     """API key information."""
 
-    id: int = Field(alias="id")
     name: str
     api_key: str = Field(alias="api_key")
     created_at: datetime = Field(alias="created_at")

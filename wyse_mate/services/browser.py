@@ -116,3 +116,31 @@ class BrowserService:
             result_model=ListBrowserPagesResponse,
             params=params,
         )
+
+    def show_info(self, session_id: str, message: dict) -> None:
+        """Print concise browser info from the provided RICH message."""
+        try:
+            msg = message or {}
+            if not msg:
+                print("    Browser: No RICH message")
+                return
+
+            # Ensure the RICH message corresponds to the given session
+            if msg.get("session_id") and msg.get("session_id") != session_id:
+                print("    Browser: RICH message does not match session")
+                return
+
+            content = (
+                msg.get("content")
+                or msg.get("message", {}).get("data", {}).get("text")
+                or ""
+            )
+            data = msg.get("message", {}).get("data", {}) or {}
+            action = data.get("action", "unknown")
+            screenshot = data.get("screenshot", "none")
+
+            print(f"    content: {content}")
+            print(f"    action: {action}")
+            print(f"    screenshot: {screenshot}")
+        except Exception:
+            print("    Browser: Error printing info")
