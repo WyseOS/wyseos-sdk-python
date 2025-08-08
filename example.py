@@ -6,7 +6,6 @@ Example usage of the Mate SDK Python.
 import time
 from typing import Optional
 
-# Import the SDK
 from wyse_mate import Client, ClientOptions
 from wyse_mate.config import load_config
 from wyse_mate.models import (
@@ -20,14 +19,14 @@ from wyse_mate.websocket import MessageType, WebSocketClient
 
 def main():
     """Main example function."""
-    # Try to load configuration from mate.yaml
+    # Load configuration from mate.yaml, fallback to manual
     try:
-        print("Loaded configuration from mate.yaml")
         client = Client(load_config())
+        print("Loaded configuration from mate.yaml")
     except Exception as e:
         print(f"Error loading configuration: {e}")
-        print("Using default configuration")
         client = Client(ClientOptions())
+        print("Using default configuration")
 
     print("1. User API Keys")
     user_operations(client)
@@ -36,65 +35,58 @@ def main():
     team_operations(client)
 
     print("\n3. Agents")
-    agent_operations(client, None)
+    agent_operations(client)
 
     print("\n4. Start New Session")
-    # Ask for initial task BEFORE creating the session
-    initial_task = input("Please enter your task: ").strip()
-    if not initial_task:
-        print("  Error: initial task is required")
+    task = input("Enter your task: ").strip()
+    if not task:
+        print("  Error: task is required")
         return
-    session = session_operations(client, "wyse_mate", initial_task)
+
+    session_info = session_operations(client, "wyse_mate", task)
 
     print("\n5. Setting up WebSocket connection")
-    websocket_operations(client, session, initial_task)
+    websocket_operations(client, session_info, task)
 
 
 def user_operations(client: Client):
-    """user-related operations."""
+    """User-related operations."""
 
-    # List API keys
     api_keys_page = client.user.list_api_keys(ListOptions(page_num=1, page_size=10))
     print(f"  Found {api_keys_page.total} API keys")
-
     for key in api_keys_page.data:
         print(f"    - {key.name}")
 
 
 def team_operations(client: Client):
-    """team-related operations."""
+    """Team-related operations."""
 
-    # List teams
     teams_page = client.team.get_list("all", ListOptions(page_num=1, page_size=10))
     print(f"  Found {teams_page.total} teams")
-
     for team in teams_page.data:
         print(f"    - {team.name} (ID: {team.team_id})")
 
 
-def agent_operations(client: Client, team_id: Optional[str]):
-    """agent-related operations."""
+def agent_operations(client: Client):
+    """Agent-related operations."""
 
-    # List agents
     agents_page = client.agent.get_list("all", ListOptions(page_num=1, page_size=10))
     print(f"  Found {agents_page.total} agents")
-
     for agent in agents_page.data:
         print(f"    - {agent.name} (ID: {agent.agent_id})")
 
 
-def session_operations(client: Client, team_id: str, task: str):
-    """Create session and fetch its info."""
+def session_operations(client: Client, team_id: str, task: str) -> SessionInfo:
+    """Create a session and fetch its info."""
 
     create_resp = client.session.create(
         CreateSessionRequest(team_id=team_id, task=task)
     )
     session_id = create_resp.session_id
-    print(f"  Created new session: {session_id}, Team ID: {team_id}")
-
-    # Get session details
     session_details = client.session.get_info(session_id)
-    print(f"  Session status: {session_details.status}")
+    print(
+        f"  Created new session: {session_id}, Team ID: {team_id}, Status: {session_details.status}"
+    )
     return session_details
 
 
@@ -131,8 +123,9 @@ def websocket_operations(client: Client, session: SessionInfo, initial_task: str
 
         elif msg_type == MessageType.INPUT:
             request_id = WebSocketClient.get_request_id(message)
-
-            is_response_plan = msg_list[-1].get("type") == MessageType.PLAN
+            is_response_plan = (
+                bool(msg_list) and msg_list[-1].get("type") == MessageType.PLAN
+            )
             if request_id and is_response_plan:
                 try:
                     acceptance_message = (
@@ -141,7 +134,6 @@ def websocket_operations(client: Client, session: SessionInfo, initial_task: str
                     if not ws_client.connected:
                         print("    WebSocket not connected, cannot send message")
                         return
-
                     ws_client.send_message(acceptance_message)
                     print(f"Auto-accepted plan (ID: {request_id})")
                 except Exception as e:
@@ -181,7 +173,6 @@ def websocket_operations(client: Client, session: SessionInfo, initial_task: str
     ws_client.set_error_handler(lambda e: print(f"  ⚠ WebSocket error: {e}"))
 
     ws_client.connect(session.session_id)
-
     time.sleep(5)
     if not ws_client.connected:
         print("  Failed to connect!")

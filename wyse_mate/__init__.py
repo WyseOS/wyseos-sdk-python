@@ -2,7 +2,7 @@
 Wyse Mate Python SDK
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __author__ = "Wyse"
 __email__ = "info@wyseos.com"
 
