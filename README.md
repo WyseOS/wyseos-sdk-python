@@ -1,12 +1,12 @@
-# Mate SDK Python 
+# WyseOS SDK for Python
 
-[![Python SDK CI/CD](https://github.com/WyseOS/mate-sdk-python/actions/workflows/python-sdk-ci.yml/badge.svg)](https://github.com/WyseOS/mate-sdk-python/actions/workflows/python-sdk-ci.yml)
+[![Python SDK CI/CD](https://github.com/WyseOS/wyseos-sdk-python/actions/workflows/python-sdk-ci.yml/badge.svg)](https://github.com/WyseOS/wyseos-sdk-python/actions/workflows/python-sdk-ci.yml)
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/downloads/)
-[![PyPI Package](https://img.shields.io/badge/PyPI-wyse--mate--sdk-blue)](https://pypi.org/project/wyse-mate-sdk/)
+[![PyPI Package](https://img.shields.io/badge/PyPI-wyseos--sdk-blue)](https://pypi.org/project/wyseos-sdk/)
 [![Documentation](https://img.shields.io/badge/docs-comprehensive-green)](./README.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-Mate SDK Python for interacting with the Mate API. Built with modern Python practices, type safety, and real-time support.
+WyseOS SDK Python for interacting with the WyseOS API. Built with modern Python practices, type safety, and real-time support.
 
 ## 🚀 Features
 
@@ -18,41 +18,27 @@ Mate SDK Python for interacting with the Mate API. Built with modern Python prac
 ## 📦 Installation
 
 ```bash
-pip install wyse-mate-sdk
+pip install wyseos-sdk
 ```
 
-## 🏃‍♂️ Quick Start
+## 🚀 Examples
 
-```python
-from wyse_mate import Client, ClientOptions
-from wyse_mate.config import load_config
+To help you get started, we've included a collection of ready-to-run examples in the `examples` directory.
 
-# Initialize using mate.yaml (in CWD)
-client = Client(load_config())
+### Getting Started
 
-# List teams
-from wyse_mate.models import ListOptions
-teams = client.team.get_list(options=ListOptions(page_num=1, page_size=10))
-print(f"Found {teams.total} teams")
+The `examples/getting_started` directory contains a script demonstrating core features of the SDK. To run it:
 
-# Create a session and read messages
-from wyse_mate.models import CreateSessionRequest
-session = client.session.create(CreateSessionRequest(team_id="your-team-id", task="My task"))
-info = client.session.get_info(session.session_id)
-msgs = client.session.get_messages(session.session_id, page_num=1, page_size=20)
-print(info.status, msgs.total_count)
+1.  Navigate to `examples/getting_started`.
+2.  Open `mate.yaml` and add your API key.
+3.  Run the script: `python example.py`.
 
-# WebSocket (Real Time)
-from wyse_mate.websocket import WebSocketClient
-ws = WebSocketClient(base_url=client.base_url, api_key=client.api_key, session_id=info.session_id)
-ws.set_message_handler(lambda m: print(m))
-ws.connect(info.session_id)
-```
+For a more detailed walkthrough, check out the **[Quick Start Guide](./examples/quickstart.md)**.
 
 ## 📚 Documentation
 
 - **[Installation Guide](./installation.md)**
-- **[Quick Start Guide](./quickstart.md)**
+- **[Quick Start Guide](./examples/quickstart.md)**
 
 ## 🔧 Configuration
 
@@ -62,14 +48,13 @@ Create `mate.yaml`:
 api_key: "your-api-key"
 base_url: "https://api.mate.wyseos.com"
 timeout: 30
-debug: false
 ```
 
 Load configuration:
 
 ```python
-from wyse_mate import Client
-from wyse_mate.config import load_config
+from wyseos.mate import Client
+from wyseos.mate.config import load_config
 
 client = Client(load_config("mate.yaml"))
 ```
@@ -90,7 +75,7 @@ client = Client(load_config("mate.yaml"))
 ## 🔌 WebSocket
 
 ```python
-from wyse_mate.websocket import WebSocketClient, MessageType
+from wyseos.mate.websocket import WebSocketClient, MessageType
 
 ws = WebSocketClient(base_url=client.base_url, api_key=client.api_key, session_id="your-session-id")
 ws.set_connect_handler(lambda: print("Connected"))
@@ -114,8 +99,8 @@ ws.send_message({
 
 ```bash
 # Clone repository
-git clone https://github.com/WyseOS/mate-sdk-python
-cd mate-sdk-python
+git clone https://github.com/WyseOS/wyseos-sdk-python
+cd wyseos-sdk-python
 
 # Install in development mode
 pip install -e .
@@ -144,15 +129,15 @@ MIT License — see `LICENSE`.
 
 ## 🆘 Support
 
-- Issues: https://github.com/WyseOS/mate-sdk-python/issues
+- Issues: https://github.com/WyseOS/wyseos-sdk-python/issues
 - Email: support@wyseos.com
 
 ## 🔗 Links
 
-- PyPI: https://pypi.org/project/wyse-mate-sdk/
+- PyPI: https://pypi.org/project/wyseos-sdk/
 - API Docs: https://docs.wyseos.com
 - Website: https://wyseos.com
 
 —
 
-Ready for production. Build with Mate SDK Python.
+Ready for production. Build with WyseOS SDK Python.

@@ -1,5 +1,5 @@
 """
-Session service for the Mate SDK Python.
+Session service for the WyseOS SDK Python.
 """
 
 from typing import TYPE_CHECKING, Optional

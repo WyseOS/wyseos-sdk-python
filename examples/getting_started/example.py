@@ -3,25 +3,28 @@
 Example usage of the Mate SDK Python.
 """
 
+import os
 import time
 from typing import Optional
 
-from wyse_mate import Client, ClientOptions
-from wyse_mate.config import load_config
-from wyse_mate.models import (
+from wyseos.mate import Client, ClientOptions
+from wyseos.mate.config import load_config
+from wyseos.mate.models import (
     CreateSessionRequest,
     ListOptions,
     SessionInfo,
 )
-from wyse_mate.plan import Plan
-from wyse_mate.websocket import MessageType, WebSocketClient
+from wyseos.mate.plan import Plan
+from wyseos.mate.websocket import MessageType, WebSocketClient
 
 
 def main():
     """Main example function."""
     # Load configuration from mate.yaml, fallback to manual
     try:
-        client = Client(load_config())
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(script_dir, "mate.yaml")
+        client = Client(load_config(config_path))
         print("Loaded configuration from mate.yaml")
     except Exception as e:
         print(f"Error loading configuration: {e}")

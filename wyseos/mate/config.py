@@ -1,9 +1,9 @@
 """
-Configuration management for the Wyse Mate Python SDK.
+Configuration management for the WyseOS Python SDK.
 """
 
 from pathlib import Path
-from typing import Any, Optional, TypeVar, Union
+from typing import Optional, TypeVar, Union
 
 try:
     import yaml
@@ -18,7 +18,6 @@ from .constants import (
     DEFAULT_BASE_URL,
     DEFAULT_CONFIG_FILE,
     DEFAULT_TIMEOUT,
-    DEFAULT_USER_AGENT,
 )
 from .errors import ConfigError
 
@@ -26,7 +25,7 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class ClientOptions(BaseModel):
-    """Configuration options for the Wyse Mate client."""
+    """Configuration options for the WyseOS client."""
 
     api_key: Optional[str] = Field(
         default=None,
@@ -40,17 +39,6 @@ class ClientOptions(BaseModel):
         default=DEFAULT_TIMEOUT,
         ge=1,
         le=300,
-    )
-    user_agent: str = Field(
-        default=DEFAULT_USER_AGENT,
-        min_length=1,
-    )
-    debug: bool = Field(
-        default=False,
-    )
-    http_client: Optional[Any] = Field(
-        default=None,
-        exclude=True,
     )
 
     class Config:
@@ -97,6 +85,10 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> ClientOptions
 
         if not isinstance(config_data, dict):
             raise ConfigError("Configuration file must contain a YAML dictionary")
+
+        # If a 'mate' key exists at the top level, use that as the config dict
+        if "mate" in config_data and isinstance(config_data["mate"], dict):
+            config_data = config_data["mate"]
 
         return ClientOptions(**config_data)
 

@@ -1,4 +1,4 @@
-# Wyse Mate Python SDK Requirements
+# WyseOS Python SDK Requirements
 
 # HTTP client library
 requests>=2.31.0

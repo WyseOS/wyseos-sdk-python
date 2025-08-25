@@ -1,5 +1,5 @@
 """
-Constants for the Wyse Mate Python SDK.
+Constants for the WyseOS Python SDK.
 
 This module contains all constants used throughout the SDK.
 """
@@ -9,7 +9,6 @@ DEFAULT_CONFIG_FILE = "mate.yaml"
 
 # Default Configuration
 DEFAULT_BASE_URL = "https://api.mate.wyseos.com"
-DEFAULT_USER_AGENT = "WyseMatePython/0.1.0"
 DEFAULT_TIMEOUT = 30  # seconds
 
 # HTTP Headers

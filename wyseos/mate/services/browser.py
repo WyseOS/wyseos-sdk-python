@@ -1,5 +1,5 @@
 """
-Browser service for the Mate SDK Python.
+Service for interacting with the Browser endpoints of the WyseOS API.
 """
 
 from typing import TYPE_CHECKING, Optional
@@ -10,6 +10,7 @@ from ..constants import (
     ENDPOINT_BROWSER_PAGE_LIST,
     ENDPOINT_BROWSER_RELEASE,
 )
+from ..errors import APIError
 from ..models import (
     BrowserInfo,
     ListBrowserPagesResponse,
@@ -74,8 +75,6 @@ class BrowserService:
         )
 
         if resp.get("code") != 0:
-            from ..errors import APIError
-
             raise APIError(
                 message=resp.get("msg", "Unknown error"), code=resp.get("code")
             )

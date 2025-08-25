@@ -1,5 +1,5 @@
 """
-Agent service for the Mate SDK Python.
+Service for interacting with the Agent endpoints of the WyseOS API.
 """
 
 from typing import TYPE_CHECKING, Optional

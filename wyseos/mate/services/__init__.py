@@ -1,5 +1,5 @@
 """
-Services package for the Mate SDK Python.
+Services package for the WyseOS SDK Python.
 """
 
 from .agent import AgentService

@@ -1,8 +1,8 @@
 """
-Wyse Mate Python SDK
+WyseOS Mate Python SDK
 """
 
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 __author__ = "Wyse"
 __email__ = "info@wyseos.com"
 
