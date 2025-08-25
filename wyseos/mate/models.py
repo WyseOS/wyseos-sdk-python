@@ -1,5 +1,5 @@
 """
-Data models for the Wyse Mate Python SDK.
+Data models for the WyseOS Python SDK.
 """
 
 from datetime import datetime
@@ -147,7 +147,7 @@ class SessionInfo(BaseModel):
     status: str
     browser_id: str = Field(alias="browser_id")
     team_id: str = Field(alias="team_id")
-    intent_id: str = Field(alias="intent_id")
+    intent_id: Optional[str] = Field(alias="intent_id", default=None)
     name: str
     task: List[UserTaskMessage] = Field(alias="task")
     task_result: Dict[str, Any] = Field(alias="task_result")

@@ -1,11 +1,38 @@
 # Quick Start Guide
 
-Get up and running with the Mate SDK Python in minutes.
+Get up and running with the WyseOS SDK for Python in minutes.
+
+## Set Up a Virtual Environment (Recommended)
+
+Before installing the SDK, it's a good practice to create a virtual environment to isolate project dependencies.
+
+### Using `venv`
+
+```bash
+# Create the environment
+python -m venv wyseos-sdk-env
+
+# Activate it
+# On macOS/Linux:
+source wyseos-sdk-env/bin/activate
+# On Windows:
+# .\wyseos-sdk-env\Scripts\activate
+```
+
+### Using `conda`
+
+```bash
+# Create and activate the environment
+conda create -n wyseos-sdk python=3.9
+conda activate wyseos-sdk
+```
 
 ## 1. Installation
 
+Once your virtual environment is activated, install the SDK:
+
 ```bash
-pip install wyse-mate-sdk
+pip install wyseos-sdk
 ```
 
 ## 2. Get Your API Key
@@ -16,26 +43,36 @@ pip install wyse-mate-sdk
 
 ## 3. Configure
 
-Create a `mate.yaml` in your project root:
+This quick start example includes a `mate.yaml` file. Open `examples/getting_started/mate.yaml` and add your API key.
+
+The configuration file should look like this:
 
 ```yaml
-api_key: "your-api-key"
-base_url: "https://api.mate.wyseos.com"
-timeout: 30
-debug: false
+mate:
+  api_key: "your-api-key"
+  base_url: "https://api.mate.wyseos.com"
+  timeout: 30
 ```
 
 ## 4. Initialize the Client
 
-```python
-from wyse_mate import Client, ClientOptions
-from wyse_mate.config import load_config
+To run the examples, the client needs to load the configuration file from its specific path.
 
-# Prefer config file (mate.yaml)
+```python
+import os
+from wyseos.mate import Client, ClientOptions
+from wyseos.mate.config import load_config
+
+# Get the directory where the script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# Build the path to the config file
+config_path = os.path.join(script_dir, "mate.yaml")
+
 try:
-    client = Client(load_config())
+    # Load configuration from the specific path
+    client = Client(load_config(config_path))
 except Exception:
-    # Fallback to manual options
+    # Fallback to manual options if config fails
     client = Client(ClientOptions(api_key="your-api-key"))
 ```
 
@@ -43,7 +80,7 @@ except Exception:
 
 ### List API Keys
 ```python
-from wyse_mate.models import ListOptions
+from wyseos.mate.models import ListOptions
 
 api_keys = client.user.list_api_keys(ListOptions(page_num=1, page_size=10))
 print(f"Found {api_keys.total} API keys")
@@ -53,7 +90,7 @@ for key in api_keys.data:
 
 ### List Teams
 ```python
-from wyse_mate.models import ListOptions
+from wyseos.mate.models import ListOptions
 
 teams = client.team.get_list(team_type="wyse_mate", options=ListOptions(page_num=1, page_size=10))
 print(f"Found {teams.total} teams")
@@ -81,7 +118,7 @@ for agent in agents.data:
 Create a session and fetch messages.
 
 ```python
-from wyse_mate.models import CreateSessionRequest
+from wyseos.mate.models import CreateSessionRequest
 
 # Create
 session_resp = client.session.create(
@@ -102,7 +139,7 @@ print(f"Total messages: {msgs.total_count}")
 
 ```python
 # List browsers for a session
-from wyse_mate.models import ListOptions
+from wyseos.mate.models import ListOptions
 
 browsers = client.browser.list_browsers(session_id=session_resp.session_id, options=ListOptions(page_num=1, page_size=10))
 print(f"Found {browsers.total} browsers")
@@ -120,7 +157,7 @@ if browsers.browsers:
 ## 8. WebSocket (Real-time)
 
 ```python
-from wyse_mate.websocket import WebSocketClient, MessageType
+from wyseos.mate.websocket import WebSocketClient, MessageType
 
 ws = WebSocketClient(
     base_url=client.base_url,  # e.g., https://api.mate.wyseos.com
@@ -154,7 +191,7 @@ ws.disconnect()
 ## 9. Error Handling
 
 ```python
-from wyse_mate.errors import APIError, ValidationError, NetworkError, ConfigError
+from wyseos.mate.errors import APIError, ValidationError, NetworkError, ConfigError
 
 try:
     teams = client.team.get_list()
@@ -173,7 +210,7 @@ except Exception as e:
 ## 10. Pagination Pattern
 
 ```python
-from wyse_mate.models import ListOptions
+from wyseos.mate.models import ListOptions
 
 opts = ListOptions(page_num=1, page_size=10)
 page = client.team.get_list(options=opts)
@@ -187,5 +224,5 @@ while opts.page_num * opts.page_size < page.total:
 
 —
 
-- **Docs**: `README.md`
-- **Install Guide**: `installation.md`
+- **Docs**: `../README.md`
+- **Install Guide**: `../installation.md`

@@ -11,7 +11,7 @@ dist/
 # Virtual environments
 venv/
 env/
-mate-sdk-env/
+wyseos-sdk-env/
 .venv
 
 # Editors and IDEs

@@ -1,5 +1,5 @@
 """
-Core API client for the Wyse Mate Python SDK.
+Core API client for the WyseOS Python SDK.
 """
 
 from typing import Dict, Optional, Type, TypeVar
@@ -13,7 +13,6 @@ from .constants import (
     CONTENT_TYPE_JSON,
     DEFAULT_BASE_URL,
     DEFAULT_TIMEOUT,
-    DEFAULT_USER_AGENT,
     HEADER_ACCEPT,
     HEADER_API_KEY,
     HEADER_CONTENT_TYPE,
@@ -30,7 +29,7 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class Client:
-    """Main API client for the Wyse Mate."""
+    """Main API client for the WyseOS."""
 
     def __init__(self, options: Optional[ClientOptions] = None):
         if options is None:
@@ -39,8 +38,8 @@ class Client:
         self.base_url = options.base_url or DEFAULT_BASE_URL
         self.api_key = options.api_key
         self.timeout = options.timeout or DEFAULT_TIMEOUT
-        self.user_agent = options.user_agent or DEFAULT_USER_AGENT
-        self.http_client = options.http_client or requests.Session()
+        self.user_agent = "WyseOSPython/0.2.0"  # Set user_agent directly
+        self.http_client = requests.Session()
 
         # Initialize services
         self.user = UserService(self)

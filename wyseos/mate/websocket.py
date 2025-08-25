@@ -1,5 +1,5 @@
 """
-WebSocket client for the Wyse Mate Python SDK.
+WebSocket client for the WyseOS Python SDK.
 """
 
 import asyncio
@@ -50,7 +50,7 @@ class InputType:
 
 
 class WebSocketClient:
-    """WebSocket client for real-time communication with the Wyse Mate."""
+    """WebSocket client for real-time communication with the WyseOS."""
 
     def __init__(
         self,

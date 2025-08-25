@@ -10,26 +10,23 @@ Install and set up the Mate SDK Python.
 ## Install
 
 ```bash
-pip install wyse-mate-sdk
+pip install wyseos-sdk
 ```
 
 ## From Source
 
 ```bash
-git clone https://github.com/WyseOS/mate-sdk-python
-cd mate-sdk-python
+git clone https://github.com/WyseOS/wyseos-sdk-python
+cd wyseos-sdk-python
 pip install -e .
 ```
 
 ## Verify
 
 ```python
-import wyse_mate
-from wyse_mate import Client
-from wyse_mate.config import load_config
+import wyseos.mate
 
-print(f"Mate SDK Python version: {wyse_mate.__version__}")
-client = Client(load_config())
+print(f"WyseOS SDK Python version: {wyseos.mate.__version__}")
 print("✅ Installation successful!")
 ```
 
@@ -47,17 +44,17 @@ Automatically installed:
 Create `mate.yaml` in your project root:
 
 ```yaml
-api_key: "your-api-key"
-base_url: "https://api.mate.wyseos.com"
-timeout: 30
-debug: false
+mate:
+  api_key: "your-api-key"
+  base_url: "https://api.mate.wyseos.com"
+  timeout: 30
 ```
 
 Load configuration:
 
 ```python
-from wyse_mate import Client, ClientOptions
-from wyse_mate.config import load_config
+from wyseos.mate import Client, ClientOptions
+from wyseos.mate.config import load_config
 
 try:
     client = Client(load_config())
@@ -70,31 +67,31 @@ except Exception:
 ### venv
 
 ```bash
-python -m venv mate-sdk-env
+python -m venv wyseos-sdk-env
 # macOS/Linux
-source mate-sdk-env/bin/activate
+source wyseos-sdk-env/bin/activate
 # Windows
-# mate-sdk-env\Scripts\activate
-pip install wyse-mate-sdk
+# wyseos-sdk-env\Scripts\activate
+pip install wyseos-sdk
 ```
 
 ### conda
 
 ```bash
-conda create -n mate-sdk python=3.9
-conda activate mate-sdk
-pip install wyse-mate-sdk
+conda create -n wyseos-sdk python=3.9
+conda activate wyseos-sdk
+pip install wyseos-sdk
 ```
 
 ## Troubleshooting
 
-- **ImportError: No module named 'wyse_mate'**: Ensure the environment is activated and the package is installed.
+- **ImportError: No module named 'wyseos.mate'**: Ensure the environment is activated and the package is installed.
 - **ConfigError: Configuration file not found: mate.yaml**: Create `mate.yaml` or pass a custom path to `load_config`.
 - **SSLCertificateError**: Update certificates or configure SSL appropriately in your environment.
 - **Invalid YAML**: Ensure proper YAML syntax and indentation.
 
 ## Getting Help
 
-- Issues: https://github.com/WyseOS/mate-sdk-python/issues
+- Issues: https://github.com/WyseOS/wyseos-sdk-python/issues
 - Docs: `README.md`
 - Support: info@wyseos.com 

@@ -1,5 +1,5 @@
 """
-User service for the Mate SDK Python.
+User service for the WyseOS SDK Python.
 """
 
 from typing import TYPE_CHECKING, Optional

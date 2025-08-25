@@ -1,5 +1,5 @@
 """
-Custom exception classes for the Wyse Mate Python SDK.
+Custom exception classes for the WyseOS Python SDK.
 """
 
 from typing import Any, Dict, Optional

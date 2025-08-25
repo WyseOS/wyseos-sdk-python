@@ -1,8 +1,8 @@
 """
-Plan models for the Wyse Mate Python SDK.
+Plan models for the WyseOS Python SDK.
 
 This module defines a unified plan data structure that supports both
-- Wyse Mate plan (single-level list of steps)
+- Wyse OS plan (single-level list of steps)
 - Deep Research plan (two-level nested steps)
 """
 
@@ -42,7 +42,7 @@ class PlanStep(BaseModel):
     """A single plan step that can optionally contain sub-steps.
 
     It covers both:
-    - Wyse Mate Plan: leaf steps with `agents`, `title`, `description`, no `steps`.
+    - Wyse OS Plan: leaf steps with `agents`, `title`, `description`, no `steps`.
     - Deep Research Plan: group steps (with `steps`) and child leaf steps.
     """
 
@@ -81,7 +81,7 @@ class Plan(BaseModel):
     """Unified plan object.
 
     Attributes:
-        items: The root steps of the plan. For Wyse Mate, these are leaf steps.
+        items: The root steps of the plan. For Wyse OS, these are leaf steps.
                For Deep Research, these can be group steps containing `steps`.
     """
 

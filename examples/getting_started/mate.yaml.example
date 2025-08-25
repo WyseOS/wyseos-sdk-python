@@ -1,0 +1,7 @@
+mate:
+  # API Configuration
+  api_key: ""
+  base_url: "https://api.dev.wyseos.com"
+
+  # Client Configuration
+  timeout: 30
