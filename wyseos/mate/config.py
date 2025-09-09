@@ -1,5 +1,5 @@
 """
-Configuration management for the WyseOS Python SDK.
+Configuration management
 """
 
 from pathlib import Path

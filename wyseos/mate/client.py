@@ -1,5 +1,5 @@
 """
-Core API client for the WyseOS Python SDK.
+Core API client
 """
 
 from typing import Dict, Optional, Type, TypeVar

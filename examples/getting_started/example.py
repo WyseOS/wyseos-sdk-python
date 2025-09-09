@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Example usage of the Mate SDK Python.
+Example usage of the WyseOS Python SDK.
 """
 
 import os

@@ -1,6 +1,6 @@
 # Installation Guide
 
-Install and set up the Mate SDK Python.
+Install and set up the WyseOS Python SDK.
 
 ## Requirements
 

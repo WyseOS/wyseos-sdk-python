@@ -11,3 +11,5 @@ websockets>=11.0.0
 
 # YAML configuration support
 PyYAML>=6.0.0
+
+python-socks>=2.7.0
