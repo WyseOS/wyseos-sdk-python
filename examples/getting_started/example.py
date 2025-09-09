@@ -1,11 +1,26 @@
 #!/usr/bin/env python3
 """
-Example usage of the WyseOS Python SDK.
+Enhanced Example usage of the WyseOS Python SDK.
+
+This enhanced example demonstrates comprehensive message handling capabilities including:
+- Structured event logging with Pydantic models
+- Automatic plan acceptance with intelligent logic
+- Rich message processing for browser interactions
+- Screenshot and content capture
+- Completion tracking with threading events
+
+The message handling logic is inspired by the automatic_wyseos_sdk.py implementation
+but adapted to work directly with the SDK's internal classes and components.
 """
 
+import datetime
+import logging
 import os
+import threading
 import time
-from typing import Optional
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel
 
 from wyseos.mate import Client, ClientOptions
 from wyseos.mate.config import load_config
@@ -17,10 +32,33 @@ from wyseos.mate.models import (
 from wyseos.mate.plan import Plan
 from wyseos.mate.websocket import MessageType, WebSocketClient
 
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+
+class EventLog(BaseModel):
+    """
+    Logging events during operations.
+
+    Attributes:
+        source (str): The source of the event (e.g., agent name).
+        content (str): The content/message of the event.
+        timestamp (str): ISO-formatted timestamp of the event.
+        metadata (Dict[str, str]): Additional metadata for the event.
+    """
+
+    source: str
+    content: str
+    timestamp: str
+    metadata: Dict[str, str] = {}
+
 
 def main():
     """Main example function."""
-    # Load configuration from mate.yaml, fallback to manual
+    # Load configuration from mate.yaml
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(script_dir, "mate.yaml")
@@ -49,7 +87,12 @@ def main():
     session_info = session_operations(client, "wyse_mate", task)
 
     print("\n5. Setting up WebSocket connection")
-    websocket_operations(client, session_info, task)
+    websocket_operations(
+        client,
+        session_info,
+        task,
+        auto_accept_plan=True,
+    )
 
 
 def user_operations(client: Client):
@@ -93,75 +136,342 @@ def session_operations(client: Client, team_id: str, task: str) -> SessionInfo:
     return session_details
 
 
-def websocket_operations(client: Client, session: SessionInfo, initial_task: str):
-    """WebSocket interactive session with complete start-to-stop flow."""
+def websocket_operations(
+    client: Client,
+    session: SessionInfo,
+    initial_task: str,
+    auto_accept_plan: bool = True,
+):
+    """WebSocket interactive session with comprehensive message handling."""
 
-    msg_list = []
+    messages_so_far: List[EventLog] = []
+    raw_messages: List[Dict[str, Any]] = []
     plan_state: Optional[Plan] = None
+    result_container = {
+        "final_answer": "",
+        "task_completed": False,
+        "has_error": False,
+        "error": None,
+        "connection_closed": False,
+        "screenshots": [],
+    }
+
+    # Create completion events for thread-safe communication
+    completion_events = {
+        "task_completed": threading.Event(),
+        "error": threading.Event(),
+        "connection_closed": threading.Event(),
+        "user_exit": threading.Event(),
+    }
 
     def on_message(message):
-        msg_type = WebSocketClient.get_message_type(message)
-        # print(json.dumps(message, ensure_ascii=False, indent=2))
+        try:
+            msg_type = WebSocketClient.get_message_type(message)
+            timestamp = datetime.datetime.now().isoformat()
 
-        if msg_type == MessageType.TEXT:
-            content = message.get("content", "")
-            source = message.get("source", "unknown")
-            print(f"  {source} - {content}")
+            if msg_type == MessageType.TEXT:
+                # Handle text messages from agents
+                raw_metadata = message.get("metadata", {})
+                str_metadata = {k: str(v) for k, v in raw_metadata.items()}
+                content = message.get("content", "")
+                source = message.get("source", "unknown")
 
-        elif msg_type == MessageType.PLAN:
-            try:
-                nonlocal plan_state
-                if plan_state is None:
-                    plan_state = Plan()
-                changed = plan_state.apply_message(message)
-                if changed:
-                    print("Received Plan:")
-                    print(plan_state.render_text())
-                    print(f"Plan status: {plan_state.get_overall_status().value}")
-                else:
-                    print("Plan message received but no changes applied")
-                    print(f"Plan status: {plan_state.get_overall_status().value}")
-            except Exception as e:
-                print(f"Failed to parse/print plan: {e}")
+                log_event = EventLog(
+                    source=source,
+                    content=content,
+                    timestamp=timestamp,
+                    metadata=str_metadata,
+                )
+                messages_so_far.append(log_event)
+                print(f"  {source} - {content}")
 
-        elif msg_type == MessageType.INPUT:
-            request_id = WebSocketClient.get_request_id(message)
-            is_response_plan = (
-                bool(msg_list) and msg_list[-1].get("type") == MessageType.PLAN
-            )
-            if request_id and is_response_plan:
-                try:
-                    acceptance_message = (
-                        WebSocketClient.create_plan_acceptance_response(request_id)
+                # Check if this is a final answer message based on metadata
+                message_metadata = message.get("message", {}).get("metadata", {})
+                if message_metadata.get("type") == "final_answer":
+                    final_answer = content
+                    result_container["final_answer"] = final_answer
+                    result_container["task_completed"] = True
+                    logger.info(f"Final answer from TEXT message: {final_answer}")
+
+                    result_log = EventLog(
+                        source="task_result",
+                        content=f"Final Answer from TEXT: {final_answer}",
+                        timestamp=timestamp,
+                        metadata={"type": "final_result_from_text"},
                     )
-                    if not ws_client.connected:
-                        print("    WebSocket not connected, cannot send message")
-                        return
-                    ws_client.send_message(acceptance_message)
-                    print(f"Auto-accepted plan (ID: {request_id})")
+                    messages_so_far.append(result_log)
+
+                    # Set completion event
+                    completion_events["task_completed"].set()
+
+            elif msg_type == MessageType.PLAN:
+                try:
+                    nonlocal plan_state
+                    if plan_state is None:
+                        plan_state = Plan()
+                    changed = plan_state.apply_message(message)
+                    if changed:
+                        print("Received Plan:")
+                        print(plan_state.render_text())
+                        print(f"Plan status: {plan_state.get_overall_status().value}")
+
+                        # Log plan state
+                        plan_log = EventLog(
+                            source="plan_manager",
+                            content=f"Plan status: {plan_state.get_overall_status().value}",
+                            timestamp=timestamp,
+                            metadata={"plan_data": str(message)},
+                        )
+                        messages_so_far.append(plan_log)
+                    else:
+                        print("Plan message received but no changes applied")
+                        print(f"Plan status: {plan_state.get_overall_status().value}")
                 except Exception as e:
-                    print(f"Request ID: {request_id}. Failed to accept plan: {e}")
+                    print(f"Failed to parse/print plan: {e}")
+                    error_log = EventLog(
+                        source="error",
+                        content=f"Plan processing error: {str(e)}",
+                        timestamp=timestamp,
+                        metadata={"error": str(e)},
+                    )
+                    messages_so_far.append(error_log)
+
+            elif msg_type == MessageType.INPUT:
+                # Enhanced plan auto-acceptance logic
+                message_data = message.get("message", {}).get("data", {})
+                request_id = message_data.get("request_id")
+
+                # Check if this is a text-type input message
+                message_type = message.get("message", {}).get("type", "")
+                is_text_input = message_type == "text"
+
+                # Look for the most recent plan message to check if it's a plan request
+                recent_plan_message = None
+                for msg in reversed(raw_messages):
+                    if msg.get("type") == "plan":
+                        recent_plan_message = msg
+                        break
+
+                # Check if the recent plan message is either create_plan or update_plan
+                is_plan_request = False
+                if recent_plan_message:
+                    plan_msg_type = recent_plan_message.get("message", {}).get(
+                        "type", ""
+                    )
+                    is_plan_request = plan_msg_type in ["create_plan", "update_plan"]
+
+                if (
+                    request_id
+                    and is_plan_request
+                    and is_text_input
+                    and auto_accept_plan
+                ):
+                    try:
+                        # Create acceptance message
+                        acceptance = {
+                            "type": "input",
+                            "data": {
+                                "input_type": "plan",
+                                "request_id": request_id,
+                                "response": {
+                                    "accepted": True,
+                                    "plan": [],
+                                    "content": "",
+                                },
+                            },
+                        }
+
+                        if not ws_client.connected:
+                            print(
+                                "    WebSocket not connected, cannot send plan acceptance"
+                            )
+                            return
+                        ws_client.send_message(acceptance)
+                        print(f"Auto-accepted plan request {request_id}")
+
+                        accept_log = EventLog(
+                            source="system",
+                            content=f"Auto-accepted plan request {request_id}",
+                            timestamp=timestamp,
+                            metadata={"request_id": request_id},
+                        )
+                        messages_so_far.append(accept_log)
+                    except Exception as e:
+                        logger.error(
+                            f"Request ID: {request_id}. Failed to accept plan: {e}"
+                        )
+                        error_log = EventLog(
+                            source="error",
+                            content=f"Failed to accept plan: {str(e)}",
+                            timestamp=timestamp,
+                            metadata={"request_id": request_id, "error": str(e)},
+                        )
+                        messages_so_far.append(error_log)
+                else:
+                    print("Awaiting your input. Type 'exit' to leave the session.")
+
+            elif msg_type == MessageType.RICH:
+                # Enhanced RICH message handling
+                message_data = message.get("message", {})
+                message_type = message_data.get("type", "").lower()
+
+                if message_type == "browser":
+                    # Handle browser-type RICH messages
+                    browser_data = message_data.get("data", {})
+                    action = browser_data.get("action", "")
+                    screenshot = browser_data.get("screenshot", "")
+                    text = browser_data.get("text", "")
+                    url = browser_data.get("url", "")
+
+                    # Create comprehensive content description
+                    content_parts = []
+                    if action:
+                        content_parts.append(f"Action: {action}")
+                    if url:
+                        content_parts.append(f"URL: {url}")
+                    if text:
+                        content_parts.append(
+                            f"Text: {text[:200]}..."
+                            if len(text) > 200
+                            else f"Text: {text}"
+                        )
+                    if screenshot:
+                        content_parts.append("Screenshot captured")
+
+                    content_description = (
+                        "; ".join(content_parts)
+                        if content_parts
+                        else "Browser activity"
+                    )
+
+                    # Store screenshot data if present
+                    if screenshot:
+                        result_container["screenshots"].append(
+                            {
+                                "timestamp": timestamp,
+                                "action": action,
+                                "url": url,
+                                "screenshot": screenshot,
+                            }
+                        )
+
+                    # Log the browser message
+                    browser_log = EventLog(
+                        source="browser",
+                        content=content_description,
+                        timestamp=timestamp,
+                        metadata={
+                            "type": "browser_rich",
+                            "action": action,
+                            "url": url,
+                            "text": text,
+                            "has_screenshot": str(bool(screenshot)),
+                            "raw_data": str(browser_data),
+                        },
+                    )
+                    messages_so_far.append(browser_log)
+                    print(f"Browser: {content_description}")
+
+                    # Show browser info using the client
+                    source = (
+                        message.get("source") or message.get("source_type") or ""
+                    ).lower()
+                    inner_type = (message.get("message", {}).get("type") or "").lower()
+                    if source == "wyse_browser" or inner_type == "browser":
+                        client.browser.show_info(session.session_id, message)
+
+                else:
+                    # Handle other RICH message types
+                    rich_content = message.get("content", {})
+                    if (
+                        "screenshot" in rich_content
+                        or "browser" in str(rich_content).lower()
+                    ):
+                        result_container["screenshots"].append(
+                            {"timestamp": timestamp, "data": rich_content}
+                        )
+
+                        screenshot_log = EventLog(
+                            source="rich_content",
+                            content="Rich content with screenshot",
+                            timestamp=timestamp,
+                            metadata={"type": "screenshot", "data": str(rich_content)},
+                        )
+                        messages_so_far.append(screenshot_log)
+                    else:
+                        # Log other RICH messages
+                        rich_log = EventLog(
+                            source="rich_content",
+                            content=f"RICH message type: {message_type}",
+                            timestamp=timestamp,
+                            metadata={
+                                "type": "rich_other",
+                                "message_type": message_type,
+                                "raw_message": str(message),
+                            },
+                        )
+                        messages_so_far.append(rich_log)
+
+            elif msg_type == MessageType.TASK_RESULT:
+                # Handle final task result
+                final_answer = message.get("content", "")
+                result_container["final_answer"] = final_answer
+                result_container["task_completed"] = True
+                print(f"Task result: {final_answer}")
+                logger.info(f"Received final answer: {final_answer}")
+
+                result_log = EventLog(
+                    source="task_result",
+                    content=f"Final Answer: {final_answer}",
+                    timestamp=timestamp,
+                    metadata={"type": "final_result"},
+                )
+                messages_so_far.append(result_log)
+
+                # Set completion event
+                completion_events["task_completed"].set()
+
+            elif msg_type == MessageType.PONG:
+                pass
+
             else:
-                print("Awaiting your input. Type 'exit' to leave the session.")
+                if msg_type != MessageType.PING:
+                    print(f"Unhandled message type: {msg_type}")
+                    generic_log = EventLog(
+                        source="websocket",
+                        content=f"Message type: {msg_type}",
+                        timestamp=timestamp,
+                        metadata={
+                            "message_type": str(msg_type),
+                            "raw_message": str(message),
+                        },
+                    )
+                    messages_so_far.append(generic_log)
 
-        elif msg_type == MessageType.RICH:
-            print("Browser Message:")
-            source = (message.get("source") or message.get("source_type") or "").lower()
-            inner_type = (message.get("message", {}).get("type") or "").lower()
-            if source == "wyse_browser" or inner_type == "browser":
-                client.browser.show_info(session.session_id, message)
+            # Track raw messages for plan acceptance logic (exclude PING/PONG)
+            if msg_type not in [MessageType.PING, MessageType.PONG]:
+                raw_messages.append(message)
 
-        elif msg_type == MessageType.TASK_RESULT:
-            content = message.get("content", "")
-            print(f"Task result: {content}")
+        except Exception as e:
+            logger.error(f"Error handling WebSocket message: {e}")
+            error_log = EventLog(
+                source="error",
+                content=f"WebSocket message handling error: {str(e)}",
+                timestamp=datetime.datetime.now().isoformat(),
+                metadata={"error": str(e)},
+            )
+            messages_so_far.append(error_log)
 
-        elif msg_type == MessageType.PONG:
-            pass
+    def on_error(error):
+        logger.error(f"WebSocket error: {error}")
+        result_container["has_error"] = True
+        result_container["error"] = str(error)
+        completion_events["error"].set()
 
-        else:
-            print(f"Unhandled type: {msg_type}")
-        if msg_type not in [MessageType.PING, MessageType.PONG]:
-            msg_list.append(message)
+    def on_close():
+        logger.info("WebSocket connection closed")
+        result_container["connection_closed"] = True
+        completion_events["connection_closed"].set()
 
     ws_client = WebSocketClient(
         base_url=client.base_url,
@@ -172,8 +482,8 @@ def websocket_operations(client: Client, session: SessionInfo, initial_task: str
 
     ws_client.set_message_handler(on_message)
     ws_client.set_connect_handler(lambda: print("  ✓ WebSocket connected"))
-    ws_client.set_disconnect_handler(lambda: print("  ✗ WebSocket disconnected"))
-    ws_client.set_error_handler(lambda e: print(f"  ⚠ WebSocket error: {e}"))
+    ws_client.set_disconnect_handler(on_close)
+    ws_client.set_error_handler(on_error)
 
     ws_client.connect(session.session_id)
     time.sleep(5)
@@ -195,24 +505,62 @@ def websocket_operations(client: Client, session: SessionInfo, initial_task: str
     print(f"  → Started task: {initial_task}")
 
     current_round = 1
-    while True:
-        user_input = input(f"[{current_round}] > ").strip()
+    try:
+        while True:
+            # Check for completion
+            if completion_events["task_completed"].wait(timeout=0.1):
+                print("  ✓ Task completed successfully!")
+                break
+            elif completion_events["error"].wait(timeout=0.1):
+                print(
+                    f"  ✗ Task execution failed: {result_container.get('error', 'Unknown error')}"
+                )
+                break
+            elif completion_events["connection_closed"].wait(timeout=0.1):
+                if not result_container["task_completed"]:
+                    print("  ✗ WebSocket connection closed before task completion")
+                break
 
-        if user_input.lower() in ["exit", "quit", "q"]:
-            break
+            # Non-blocking input check
+            try:
+                user_input = input(f"[{current_round}] > ").strip()
+                current_round += 1
 
-        if user_input.lower() == "stop":
-            ws_client.send_stop()
-            print("  → Stop command sent")
-            time.sleep(3)
-            continue
+                if user_input.lower() in ["exit", "quit", "q"]:
+                    completion_events["user_exit"].set()
+                    break
 
-        if not user_input:
-            time.sleep(5)
-            continue
+                if user_input.lower() == "stop":
+                    ws_client.send_stop()
+                    print("  → Stop command sent")
+                    time.sleep(3)
+                    continue
 
-    ws_client.disconnect()
-    print("  Session completed.")
+                if not user_input:
+                    time.sleep(1)
+                    continue
+
+                # Send user message
+                user_message = {"type": MessageType.TEXT, "content": user_input}
+                ws_client.send_message(user_message)
+                print(f"  → Sent: {user_input}")
+
+            except KeyboardInterrupt:
+                print("\n  User interrupted session")
+                completion_events["user_exit"].set()
+                break
+
+    finally:
+        ws_client.disconnect()
+
+        if result_container["final_answer"]:
+            print(f"  📝 Final Answer: {result_container['final_answer']}")
+
+        screenshot_count = len(result_container["screenshots"])
+        if screenshot_count > 0:
+            print(f"  📸 Captured {screenshot_count} screenshots")
+
+        print("  Session completed.")
 
 
 if __name__ == "__main__":
