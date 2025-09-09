@@ -1,5 +1,5 @@
 """
-Data models for the WyseOS Python SDK.
+Data models
 """
 
 from datetime import datetime

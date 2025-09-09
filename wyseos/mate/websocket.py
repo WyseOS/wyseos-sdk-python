@@ -1,5 +1,5 @@
 """
-WebSocket client for the WyseOS Python SDK.
+WebSocket client
 """
 
 import asyncio

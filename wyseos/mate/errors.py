@@ -1,5 +1,5 @@
 """
-Custom exception classes for the WyseOS Python SDK.
+Custom exception classes
 """
 
 from typing import Any, Dict, Optional

@@ -1,5 +1,5 @@
 """
-Constants for the WyseOS Python SDK.
+Constants
 
 This module contains all constants used throughout the SDK.
 """

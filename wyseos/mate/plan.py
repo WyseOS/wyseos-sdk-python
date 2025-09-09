@@ -1,5 +1,5 @@
 """
-Plan models for the WyseOS Python SDK.
+Plan models
 
 This module defines a unified plan data structure that supports both
 - Wyse OS plan (single-level list of steps)
