@@ -79,7 +79,93 @@ def main():
     agent_operations(client)
 
     print("\n4. Start New Session")
-    task = input("Enter your task: ").strip()
+    print("\n4-1. File Upload (Optional)")
+
+    upload_choice = input("Do you have files to upload? (y/n): ").strip().lower()
+
+    uploaded_files = []
+    if upload_choice == "y" or upload_choice == "yes":
+        while True:
+            try:
+                print("\nPlease enter file paths (separate multiple files with commas):")
+                file_paths_input = input("File paths: ").strip()
+
+                if not file_paths_input:
+                    print("  ✗ Please enter valid file paths")
+                    continue
+
+                # Split multiple file paths
+                file_paths = [
+                    path.strip() for path in file_paths_input.split(",") if path.strip()
+                ]
+
+                if not file_paths:
+                    print("  ✗ Please enter valid file paths")
+                    continue
+
+                all_success = True
+                current_batch_files = []
+
+                for file_path in file_paths:
+                    print(f"\nProcessing file: {file_path}")
+
+                    # Validate file
+                    is_valid, message = client.file_upload.validate_file(file_path)
+                    if is_valid:
+                        print(f"  ✓ File validation passed: {message}")
+
+                        # Upload file
+                        print("  Uploading file...")
+
+                        file_info = client.file_upload.get_file_info(file_path)
+
+                        upload_result = client.file_upload.upload_file(file_path)
+
+                        if upload_result.get("file_url"):
+                            file_info = client.file_upload.get_file_info(file_path)
+                            file_data = {
+                                "file_name": file_info["name"],
+                                "file_url": upload_result.get("file_url", ""),
+                            }
+                            current_batch_files.append(file_data)
+                            print(f"  ✓ File uploaded successfully: {file_info['name']}")
+                        else:
+                            print(
+                                f"  ✗ File upload failed: {upload_result.get('error', 'Unknown error')}"
+                            )
+                            all_success = False
+                    else:
+                        print(f"  ✗ File validation failed: {message}")
+                        all_success = False
+
+                if all_success and current_batch_files:
+                    uploaded_files.extend(current_batch_files)
+                    print(f"\n✓ All {len(current_batch_files)} files in this batch uploaded successfully!")
+
+                    # Ask if user wants to continue uploading more files
+                    continue_upload = (
+                        input("Do you want to continue uploading more files? (y/n): ").strip().lower()
+                    )
+                    if continue_upload not in ["y", "yes", "1"]:
+                        break
+                else:
+                    print("\n✗ Some files failed to process, please re-enter file paths")
+                    retry = input("Do you want to retry? (y/n): ").strip().lower()
+                    if retry not in ["y", "yes", "1"]:
+                        break
+
+            except Exception as e:
+                print(f"  ✗ Error occurred during file upload: {e}")
+                retry = input("Do you want to retry? (y/n): ").strip().lower()
+                if retry not in ["y", "yes", "1"]:
+                    break
+
+        if uploaded_files:
+            print(f"\n📁 Total {len(uploaded_files)} files uploaded successfully:")
+            for file_data in uploaded_files:
+                print(f"  - {file_data['file_name']}")
+
+    task = input("4-2.Enter your task: ").strip()
     if not task:
         print("  Error: task is required")
         return
@@ -92,6 +178,7 @@ def main():
         session_info,
         task,
         auto_accept_plan=True,
+        uploaded_files=uploaded_files,
     )
 
 
@@ -141,6 +228,7 @@ def websocket_operations(
     session: SessionInfo,
     initial_task: str,
     auto_accept_plan: bool = True,
+    uploaded_files: list = None,
 ):
     """WebSocket interactive session with comprehensive message handling."""
 
@@ -491,18 +579,25 @@ def websocket_operations(
         print("  Failed to connect!")
         return
 
-    # Start the task immediately using the provided initial_task
+    # Start the task immediately using the provided initial_task+
+    # # Use uploaded files from main function
+    attachments = uploaded_files if uploaded_files else []
+    # Start the task with optional file attachments
+
     start_message = {
         "type": MessageType.START,
         "data": {
             "messages": [{"type": "task", "content": initial_task}],
-            "attachments": [],
+            "attachments": attachments,
             "team_id": session.team_id,
             "kb_ids": [],
         },
     }
     ws_client.send_message(start_message)
-    print(f"  → Started task: {initial_task}")
+    if attachments:
+        print(f"  → Started task with {len(attachments)} attachment(s): {initial_task}")
+    else:
+        print(f"  → Started task: {initial_task}")
 
     current_round = 1
     try:
