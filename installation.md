@@ -38,6 +38,7 @@ Automatically installed:
 - pydantic ≥ 2.0.0
 - websockets ≥ 11.0.0
 - PyYAML ≥ 6.0.0
+- python-socks ≥ 2.7.0
 
 ## Configuration
 
@@ -46,7 +47,7 @@ Create `mate.yaml` in your project root:
 ```yaml
 mate:
   api_key: "your-api-key"
-  base_url: "https://api.mate.wyseos.com"
+  base_url: "https://api.wyseos.com"
   timeout: 30
 ```
 
@@ -94,4 +95,4 @@ pip install wyseos-sdk
 
 - Issues: https://github.com/WyseOS/wyseos-sdk-python/issues
 - Docs: `README.md`
-- Support: info@wyseos.com 
+- Support: support@wyseos.com 
