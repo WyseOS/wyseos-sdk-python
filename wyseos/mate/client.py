@@ -21,6 +21,7 @@ from .constants import (
 from .errors import APIError
 from .services.agent import AgentService
 from .services.browser import BrowserService
+from .services.file_upload import FileUploadService
 from .services.session import SessionService
 from .services.team import TeamService
 from .services.user import UserService
@@ -47,6 +48,7 @@ class Client:
         self.agent = AgentService(self)
         self.session = SessionService(self)
         self.browser = BrowserService(self)
+        self.file_upload = FileUploadService(self)
 
     def _do_request(
         self, method: str, endpoint: str, body: Optional[Dict] = None
