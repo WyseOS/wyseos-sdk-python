@@ -1,26 +1,31 @@
 #!/usr/bin/env python3
 """
-Example usage of the WyseOS Python SDK.
+Simplified Example usage of the WyseOS Python SDK.
+
+This example demonstrates the new simplified task execution interface:
+- Clean task execution with TaskRunner
+- Configurable options for different use cases
+- Streamlined error handling and logging
+- Both automated and interactive execution modes
 """
 
+import logging
 import os
-import time
-from typing import Optional
 
 from wyseos.mate import Client, ClientOptions
 from wyseos.mate.config import load_config
-from wyseos.mate.models import (
-    CreateSessionRequest,
-    ListOptions,
-    SessionInfo,
+from wyseos.mate.models import CreateSessionRequest, ListOptions, SessionInfo
+from wyseos.mate.websocket import TaskExecutionOptions, WebSocketClient
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-from wyseos.mate.plan import Plan
-from wyseos.mate.websocket import MessageType, WebSocketClient
+logger = logging.getLogger(__name__)
 
 
 def main():
     """Main example function."""
-    # Load configuration from mate.yaml, fallback to manual
+    # Load configuration from mate.yaml
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(script_dir, "mate.yaml")
@@ -41,15 +46,118 @@ def main():
     agent_operations(client)
 
     print("\n4. Start New Session")
-    task = input("Enter your task: ").strip()
+    print("\n4-1. File Upload (Optional)")
+
+    upload_choice = input("Do you have files to upload? (y/n): ").strip().lower()
+
+    uploaded_files = []
+    if upload_choice == "y" or upload_choice == "yes":
+        while True:
+            try:
+                print(
+                    "\nPlease enter file paths (separate multiple files with commas):"
+                )
+                file_paths_input = input("File paths: ").strip()
+
+                if not file_paths_input:
+                    print("  ✗ Please enter valid file paths")
+                    continue
+
+                # Split multiple file paths
+                file_paths = [
+                    path.strip() for path in file_paths_input.split(",") if path.strip()
+                ]
+
+                if not file_paths:
+                    print("  ✗ Please enter valid file paths")
+                    continue
+
+                all_success = True
+                current_batch_files = []
+
+                for file_path in file_paths:
+                    print(f"\nProcessing file: {file_path}")
+
+                    # Validate file
+                    is_valid, message = client.file_upload.validate_file(file_path)
+                    if is_valid:
+                        print(f"  ✓ File validation passed: {message}")
+
+                        # Upload file
+                        print("  Uploading file...")
+
+                        file_info = client.file_upload.get_file_info(file_path)
+
+                        upload_result = client.file_upload.upload_file(file_path)
+
+                        if upload_result.get("file_url"):
+                            file_info = client.file_upload.get_file_info(file_path)
+                            file_data = {
+                                "file_name": file_info["name"],
+                                "file_url": upload_result.get("file_url", ""),
+                            }
+                            current_batch_files.append(file_data)
+                            print(
+                                f"  ✓ File uploaded successfully: {file_info['name']}"
+                            )
+                        else:
+                            print(
+                                f"  ✗ File upload failed: {upload_result.get('error', 'Unknown error')}"
+                            )
+                            all_success = False
+                    else:
+                        print(f"  ✗ File validation failed: {message}")
+                        all_success = False
+
+                if all_success and current_batch_files:
+                    uploaded_files.extend(current_batch_files)
+                    print(
+                        f"\n✓ All {len(current_batch_files)} files in this batch uploaded successfully!"
+                    )
+
+                    # Ask if user wants to continue uploading more files
+                    continue_upload = (
+                        input("Do you want to continue uploading more files? (y/n): ")
+                        .strip()
+                        .lower()
+                    )
+                    if continue_upload not in ["y", "yes", "1"]:
+                        break
+                else:
+                    print(
+                        "\n✗ Some files failed to process, please re-enter file paths"
+                    )
+                    retry = input("Do you want to retry? (y/n): ").strip().lower()
+                    if retry not in ["y", "yes", "1"]:
+                        break
+
+            except Exception as e:
+                print(f"  ✗ Error occurred during file upload: {e}")
+                retry = input("Do you want to retry? (y/n): ").strip().lower()
+                if retry not in ["y", "yes", "1"]:
+                    break
+
+        if uploaded_files:
+            print(f"\n📁 Total {len(uploaded_files)} files uploaded successfully:")
+            for file_data in uploaded_files:
+                print(f"  - {file_data['file_name']}")
+
+    task = input("4-2. Enter your task: ").strip()
     if not task:
         print("  Error: task is required")
         return
 
     session_info = session_operations(client, "wyse_mate", task)
 
-    print("\n5. Setting up WebSocket connection")
-    websocket_operations(client, session_info, task)
+    print("\n5. Task Execution")
+    execution_mode = input(
+        "Choose execution mode (1: Automated, 2: Interactive): "
+    ).strip()
+
+    if execution_mode == "1":
+        run_automated_task(client, session_info, task, uploaded_files)
+    else:
+        run_interactive_session(client, session_info, task, uploaded_files)
 
 
 def user_operations(client: Client):
@@ -88,131 +196,108 @@ def session_operations(client: Client, team_id: str, task: str) -> SessionInfo:
     session_id = create_resp.session_id
     session_details = client.session.get_info(session_id)
     print(
-        f"  Created new session: {session_id}, Team ID: {team_id}, Status: {session_details.status}"
+        f"Created new session: {session_id}, Team ID: {team_id}, Status: {session_details.status}"
     )
     return session_details
 
 
-def websocket_operations(client: Client, session: SessionInfo, initial_task: str):
-    """WebSocket interactive session with complete start-to-stop flow."""
-
-    msg_list = []
-    plan_state: Optional[Plan] = None
-
-    def on_message(message):
-        msg_type = WebSocketClient.get_message_type(message)
-        # print(json.dumps(message, ensure_ascii=False, indent=2))
-
-        if msg_type == MessageType.TEXT:
-            content = message.get("content", "")
-            source = message.get("source", "unknown")
-            print(f"  {source} - {content}")
-
-        elif msg_type == MessageType.PLAN:
-            try:
-                nonlocal plan_state
-                if plan_state is None:
-                    plan_state = Plan()
-                changed = plan_state.apply_message(message)
-                if changed:
-                    print("Received Plan:")
-                    print(plan_state.render_text())
-                    print(f"Plan status: {plan_state.get_overall_status().value}")
-                else:
-                    print("Plan message received but no changes applied")
-                    print(f"Plan status: {plan_state.get_overall_status().value}")
-            except Exception as e:
-                print(f"Failed to parse/print plan: {e}")
-
-        elif msg_type == MessageType.INPUT:
-            request_id = WebSocketClient.get_request_id(message)
-            is_response_plan = (
-                bool(msg_list) and msg_list[-1].get("type") == MessageType.PLAN
-            )
-            if request_id and is_response_plan:
-                try:
-                    acceptance_message = (
-                        WebSocketClient.create_plan_acceptance_response(request_id)
-                    )
-                    if not ws_client.connected:
-                        print("    WebSocket not connected, cannot send message")
-                        return
-                    ws_client.send_message(acceptance_message)
-                    print(f"Auto-accepted plan (ID: {request_id})")
-                except Exception as e:
-                    print(f"Request ID: {request_id}. Failed to accept plan: {e}")
-            else:
-                print("Awaiting your input. Type 'exit' to leave the session.")
-
-        elif msg_type == MessageType.RICH:
-            print("Browser Message:")
-            source = (message.get("source") or message.get("source_type") or "").lower()
-            inner_type = (message.get("message", {}).get("type") or "").lower()
-            if source == "wyse_browser" or inner_type == "browser":
-                client.browser.show_info(session.session_id, message)
-
-        elif msg_type == MessageType.TASK_RESULT:
-            content = message.get("content", "")
-            print(f"Task result: {content}")
-
-        elif msg_type == MessageType.PONG:
-            pass
-
-        else:
-            print(f"Unhandled type: {msg_type}")
-        if msg_type not in [MessageType.PING, MessageType.PONG]:
-            msg_list.append(message)
+def run_automated_task(
+    client: Client, session_info: SessionInfo, task: str, uploaded_files: list = None
+):
+    """Run an automated task execution and return results."""
+    print("\n--- Automated Task Execution ---")
 
     ws_client = WebSocketClient(
         base_url=client.base_url,
         api_key=client.api_key,
-        session_id=session.session_id,
+        session_id=session_info.session_id,
         heartbeat_interval=30,
     )
 
-    ws_client.set_message_handler(on_message)
-    ws_client.set_connect_handler(lambda: print("  ✓ WebSocket connected"))
-    ws_client.set_disconnect_handler(lambda: print("  ✗ WebSocket disconnected"))
-    ws_client.set_error_handler(lambda e: print(f"  ⚠ WebSocket error: {e}"))
+    task_runner = ws_client.create_task_runner(client, session_info)
 
-    ws_client.connect(session.session_id)
-    time.sleep(5)
-    if not ws_client.connected:
-        print("  Failed to connect!")
-        return
+    # Configure options for automated execution
+    options = TaskExecutionOptions(
+        auto_accept_plan=True,
+        capture_screenshots=False,  # Disabled for performance
+        enable_browser_logging=True,
+        enable_event_logging=True,
+        completion_timeout=300,  # 5 minutes
+    )
 
-    # Start the task immediately using the provided initial_task
-    start_message = {
-        "type": MessageType.START,
-        "data": {
-            "messages": [{"type": "task", "content": initial_task}],
-            "attachments": [],
-            "team_id": session.team_id,
-            "kb_ids": [],
-        },
-    }
-    ws_client.send_message(start_message)
-    print(f"  → Started task: {initial_task}")
+    print(f"Starting task: {task}")
+    if uploaded_files:
+        print(f"With {len(uploaded_files)} file(s) attached")
 
-    current_round = 1
-    while True:
-        user_input = input(f"[{current_round}] > ").strip()
+    try:
+        result = task_runner.run_task(
+            task=task,
+            team_id=session_info.team_id,
+            attachments=uploaded_files or [],
+            options=options,
+        )
 
-        if user_input.lower() in ["exit", "quit", "q"]:
-            break
+        # Display results
+        if result.success:
+            print("\n✓ Task completed successfully!")
+            print(f"Final Answer: {result.final_answer}")
+            print(f"Duration: {result.session_duration:.1f} seconds")
+            print(f"Messages processed: {result.message_count}")
+            if result.execution_logs:
+                print(f"Event logs: {len(result.execution_logs)} entries")
+        else:
+            print(f"\n✗ Task failed: {result.error}")
 
-        if user_input.lower() == "stop":
-            ws_client.send_stop()
-            print("  → Stop command sent")
-            time.sleep(3)
-            continue
+    except Exception as e:
+        print(f"\n✗ Execution error: {e}")
+        logger.error(f"Task execution failed: {e}")
 
-        if not user_input:
-            time.sleep(5)
-            continue
 
-    ws_client.disconnect()
-    print("  Session completed.")
+def run_interactive_session(
+    client: Client, session_info: SessionInfo, task: str, uploaded_files: list = None
+):
+    """Run an interactive session with user input support."""
+    print("\n--- Interactive Session ---")
+
+    # Ask user about screenshot capture
+    capture_choice = (
+        input("Enable screenshot capture? (y/n, default: n): ").strip().lower()
+    )
+    capture_screenshots = capture_choice in ["y", "yes"]
+
+    ws_client = WebSocketClient(
+        base_url=client.base_url,
+        api_key=client.api_key,
+        session_id=session_info.session_id,
+        heartbeat_interval=30,
+    )
+
+    task_runner = ws_client.create_task_runner(client, session_info)
+
+    # Configure options for interactive session
+    options = TaskExecutionOptions(
+        auto_accept_plan=True,
+        capture_screenshots=capture_screenshots,
+        enable_browser_logging=True,
+        enable_event_logging=True,
+        completion_timeout=600,  # 10 minutes for interactive sessions
+    )
+
+    if uploaded_files:
+        print(
+            f"Starting interactive session with {len(uploaded_files)} file(s) attached"
+        )
+
+    try:
+        task_runner.run_interactive_session(
+            initial_task=task,
+            team_id=session_info.team_id,
+            attachments=uploaded_files or [],
+            options=options,
+        )
+    except Exception as e:
+        print(f"\n✗ Session error: {e}")
+        logger.error(f"Interactive session failed: {e}")
 
 
 if __name__ == "__main__":
