@@ -279,6 +279,34 @@ class WebSocketClient:
                 cause=e,
             )
 
+    def send_pause(self) -> None:
+        if not self.is_connected or not self.websocket:
+            raise WebSocketError(
+                "WebSocket is not connected", session_id=self.session_id
+            )
+
+        pause_message = {"type": MessageType.PAUSE}
+        try:
+            # Avoid blocking when called from within the event loop thread
+            try:
+                current_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                current_loop = None
+
+            if self.loop and current_loop is self.loop:
+                asyncio.create_task(self.websocket.send(json.dumps(pause_message)))
+            else:
+                asyncio.run_coroutine_threadsafe(
+                    self.websocket.send(json.dumps(pause_message)), self.loop
+                ).result(timeout=DEFAULT_TIMEOUT)
+            logger.info("Sent pause command")
+        except Exception as e:
+            raise WebSocketError(
+                f"Failed to send pause command: {str(e)}",
+                session_id=self.session_id,
+                cause=e,
+            )
+
     def _run_connection(self) -> None:
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
@@ -627,6 +655,12 @@ class TaskRunner:
                     if user_input.lower() == "stop":
                         self.ws_client.send_stop()
                         print("→ Stop command sent")
+                        time.sleep(3)
+                        continue
+
+                    if user_input.lower() == "pause":
+                        self.ws_client.send_pause()
+                        print("→ Pause command sent")
                         time.sleep(3)
                         continue
 
