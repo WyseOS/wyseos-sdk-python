@@ -276,7 +276,7 @@ def run_interactive_session(
 
     # Configure options for interactive session
     options = TaskExecutionOptions(
-        auto_accept_plan=True,
+        auto_accept_plan=False,
         capture_screenshots=capture_screenshots,
         enable_browser_logging=True,
         enable_event_logging=True,
