@@ -765,6 +765,12 @@ class TaskRunner:
             result_container["final_answer"] = content
             result_container["task_completed"] = True
             logger.info(f"Final answer received: {content}")
+            # Send stop command immediately when final answer is received
+            try:
+                self.ws_client.send_stop()
+                logger.info("Stop command sent after final answer")
+            except Exception as e:
+                logger.warning(f"Failed to send stop command: {e}")
             completion_events["task_completed"].set()
 
     def _handle_plan_message(
