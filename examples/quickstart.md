@@ -366,7 +366,7 @@ if __name__ == "__main__":
 - 📖 **Full Documentation**: `../README.md`
 - 🛠️ **Installation Guide**: `../installation.md`  
 - 🎯 **Complete Examples**: `getting_started/example.py`
-- 🐛 **Issues & Support**: [GitHub Issues](https://github.com/wyseos/mate-sdk-python/issues)
+- 🐛 **Issues & Support**: [GitHub Issues](https://github.com/wyseos/wyseos-sdk-python/issues)
 
 ---
 
