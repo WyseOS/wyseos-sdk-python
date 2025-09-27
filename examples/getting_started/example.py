@@ -12,7 +12,7 @@ This example demonstrates the new simplified task execution interface:
 import logging
 import os
 
-from wyseos.mate import Client, ClientOptions
+from wyseos.mate import Client, ClientOptions, create_task_runner
 from wyseos.mate.config import load_config
 from wyseos.mate.models import CreateSessionRequest, ListOptions, SessionInfo
 from wyseos.mate.websocket import TaskExecutionOptions, WebSocketClient
@@ -214,7 +214,7 @@ def run_automated_task(
         heartbeat_interval=30,
     )
 
-    task_runner = ws_client.create_task_runner(client, session_info)
+    task_runner = create_task_runner(ws_client, client, session_info)
 
     # Configure options for automated execution
     options = TaskExecutionOptions(
@@ -272,7 +272,7 @@ def run_interactive_session(
         heartbeat_interval=30,
     )
 
-    task_runner = ws_client.create_task_runner(client, session_info)
+    task_runner = create_task_runner(ws_client, client, session_info)
 
     # Configure options for interactive session
     options = TaskExecutionOptions(

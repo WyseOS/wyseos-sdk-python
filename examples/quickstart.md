@@ -122,8 +122,9 @@ ws_client = WebSocketClient(
     session_id=session_info.session_id
 )
 
-# Create task runner
-task_runner = ws_client.create_task_runner(client, session_info)
+# Create task runner using factory function
+from wyseos.mate import create_task_runner
+task_runner = create_task_runner(ws_client, client, session_info)
 
 # Configure execution options
 options = TaskExecutionOptions(
