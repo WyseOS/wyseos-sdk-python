@@ -6,7 +6,7 @@ import datetime
 import logging
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Enum, List, Optional
 
 from pydantic import BaseModel
 
@@ -44,6 +44,14 @@ class TaskResult(BaseModel):
     message_count: int = 0  # Total number of messages processed
 
 
+class TaskMode(Enum):
+    """Task execution mode, empty means default mode."""
+
+    Default = ""
+    DeepSearch = "deep_search"
+    Marketing = "marketing"
+
+
 class TaskRunner:
     """High-level task execution interface."""
 
@@ -61,6 +69,7 @@ class TaskRunner:
         task: str,
         team_id: str,
         attachments: List[Dict] = None,
+        task_mode: TaskMode = TaskMode.Default,
         options: TaskExecutionOptions = None,
     ) -> TaskResult:
         """Execute a single task and return complete result."""
@@ -116,7 +125,7 @@ class TaskRunner:
             )
 
         # Start the task
-        self._start_task(task, team_id, attachments or [])
+        self._start_task(task, team_id, attachments or [], task_mode)
 
         # Wait for completion
         timeout = options.completion_timeout
@@ -159,6 +168,7 @@ class TaskRunner:
         initial_task: str,
         team_id: str,
         attachments: List[Dict] = None,
+        task_mode: TaskMode = TaskMode.Default,
         options: TaskExecutionOptions = None,
     ) -> None:
         """Run an interactive session with user input support."""
@@ -212,7 +222,7 @@ class TaskRunner:
             return
 
         # Start the task
-        self._start_task(initial_task, team_id, attachments or [])
+        self._start_task(initial_task, team_id, attachments or [], task_mode)
         print(f"→ Started task: {initial_task}")
 
         # Interactive loop
@@ -277,7 +287,9 @@ class TaskRunner:
 
             print("Session completed.")
 
-    def _start_task(self, task: str, team_id: str, attachments: List[Dict]):
+    def _start_task(
+        self, task: str, team_id: str, attachments: List[Dict], task_mode: TaskMode
+    ):
         """Start the task execution."""
         start_message = {
             "type": MessageType.START,
@@ -286,6 +298,7 @@ class TaskRunner:
                 "attachments": attachments,
                 "team_id": team_id,
                 "kb_ids": [],
+                "mode": task_mode.value if task_mode else "",
             },
         }
         self.ws_client.send_message(start_message)

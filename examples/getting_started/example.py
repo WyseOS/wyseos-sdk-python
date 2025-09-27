@@ -15,6 +15,7 @@ import os
 from wyseos.mate import Client, ClientOptions, create_task_runner
 from wyseos.mate.config import load_config
 from wyseos.mate.models import CreateSessionRequest, ListOptions, SessionInfo
+from wyseos.mate.task_runner import TaskMode
 from wyseos.mate.websocket import TaskExecutionOptions, WebSocketClient
 
 logging.basicConfig(
@@ -149,15 +150,33 @@ def main():
 
     session_info = session_operations(client, "wyse_mate", task)
 
-    print("\n5. Task Execution")
+    print("\n5. Task Mode Selection")
+    print("Available task modes:")
+    print("  1. Default - Standard task execution")
+    print("  2. DeepSearch - Enhanced search and research capabilities")
+    print("  3. Marketing - Marketing-focused analysis and content creation")
+
+    task_mode_choice = input("Choose task mode (1-3, default: 1): ").strip()
+    if task_mode_choice == "2":
+        selected_task_mode = TaskMode.DeepSearch
+    elif task_mode_choice == "3":
+        selected_task_mode = TaskMode.Marketing
+    else:
+        selected_task_mode = TaskMode.Default
+
+    print("\n6. Task Execution")
     execution_mode = input(
         "Choose execution mode (1: Automated, 2: Interactive): "
     ).strip()
 
     if execution_mode == "1":
-        run_automated_task(client, session_info, task, uploaded_files)
+        run_automated_task(
+            client, session_info, task, uploaded_files, selected_task_mode
+        )
     else:
-        run_interactive_session(client, session_info, task, uploaded_files)
+        run_interactive_session(
+            client, session_info, task, uploaded_files, selected_task_mode
+        )
 
 
 def user_operations(client: Client):
@@ -202,7 +221,11 @@ def session_operations(client: Client, team_id: str, task: str) -> SessionInfo:
 
 
 def run_automated_task(
-    client: Client, session_info: SessionInfo, task: str, uploaded_files: list = None
+    client: Client,
+    session_info: SessionInfo,
+    task: str,
+    uploaded_files: list = None,
+    task_mode: TaskMode = TaskMode.Default,
 ):
     """Run an automated task execution and return results."""
     print("\n--- Automated Task Execution ---")
@@ -226,6 +249,7 @@ def run_automated_task(
     )
 
     print(f"Starting task: {task}")
+    print(f"Task mode: {task_mode.value if task_mode.value else 'Default'}")
     if uploaded_files:
         print(f"With {len(uploaded_files)} file(s) attached")
 
@@ -234,6 +258,7 @@ def run_automated_task(
             task=task,
             team_id=session_info.team_id,
             attachments=uploaded_files or [],
+            task_mode=task_mode,
             options=options,
         )
 
@@ -254,7 +279,11 @@ def run_automated_task(
 
 
 def run_interactive_session(
-    client: Client, session_info: SessionInfo, task: str, uploaded_files: list = None
+    client: Client,
+    session_info: SessionInfo,
+    task: str,
+    uploaded_files: list = None,
+    task_mode: TaskMode = TaskMode.Default,
 ):
     """Run an interactive session with user input support."""
     print("\n--- Interactive Session ---")
@@ -283,6 +312,7 @@ def run_interactive_session(
         completion_timeout=600,  # 10 minutes for interactive sessions
     )
 
+    print(f"Task mode: {task_mode.value if task_mode.value else 'Default'}")
     if uploaded_files:
         print(
             f"Starting interactive session with {len(uploaded_files)} file(s) attached"
@@ -293,6 +323,7 @@ def run_interactive_session(
             initial_task=task,
             team_id=session_info.team_id,
             attachments=uploaded_files or [],
+            task_mode=task_mode,
             options=options,
         )
     except Exception as e:
