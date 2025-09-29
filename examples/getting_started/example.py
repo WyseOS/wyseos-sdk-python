@@ -15,8 +15,8 @@ import os
 from wyseos.mate import Client, ClientOptions, create_task_runner
 from wyseos.mate.config import load_config
 from wyseos.mate.models import CreateSessionRequest, ListOptions, SessionInfo
-from wyseos.mate.task_runner import TaskMode
-from wyseos.mate.websocket import TaskExecutionOptions, WebSocketClient
+from wyseos.mate.task_runner import TaskExecutionOptions, TaskMode
+from wyseos.mate.websocket import WebSocketClient
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -152,9 +152,9 @@ def main():
 
     print("\n5. Task Mode Selection")
     print("Available task modes:")
-    print("  1. Default - Standard task execution")
-    print("  2. DeepSearch - Enhanced search and research capabilities")
-    print("  3. Marketing - Marketing-focused analysis and content creation")
+    print("  1. Default - Standard mode")
+    print("  2. DeepSearch - Enhanced deep research mode")
+    print("  3. Marketing - Marketing-focused mode")
 
     task_mode_choice = input("Choose task mode (1-3, default: 1): ").strip()
     if task_mode_choice == "2":

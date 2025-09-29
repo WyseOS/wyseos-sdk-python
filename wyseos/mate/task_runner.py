@@ -4,9 +4,13 @@ Task runner: high-level task execution interface.
 
 import datetime
 import logging
+import platform
+import subprocess
 import threading
 import time
-from typing import Any, Dict, Enum, List, Optional
+import webbrowser
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -27,6 +31,14 @@ class TaskExecutionOptions(BaseModel):
     enable_event_logging: bool = True  # Control detailed execution event logging
     completion_timeout: int = 300  # 5 minutes
     max_user_input_timeout: int = 0  # User input timeout, 0 means infinite wait
+
+    # Browser configuration options
+    use_existing_browser: bool = (
+        True  # Try to use existing browser instance to preserve cookies
+    )
+    preferred_browser: Optional[str] = (
+        None  # "chrome", "safari", "firefox", or None for auto-detect
+    )
 
 
 class TaskResult(BaseModel):
@@ -124,6 +136,21 @@ class TaskRunner:
                 session_duration=time.time() - self._start_time,
             )
 
+        # Open local browser for Marketing mode
+        if task_mode == TaskMode.Marketing:
+            url = "http://localhost:3000"
+            try:
+                if self._open_browser_smart(url, options):
+                    logger.info(f"Opened local browser to {url} for Marketing mode")
+                else:
+                    # Fallback to standard webbrowser.open()
+                    webbrowser.open(url)
+                    logger.info(
+                        f"Opened browser to {url} for Marketing mode (fallback method)"
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to open local browser for Marketing mode: {e}")
+
         # Start the task
         self._start_task(task, team_id, attachments or [], task_mode)
 
@@ -220,6 +247,26 @@ class TaskRunner:
         if not self.ws_client.connected:
             print("✗ Failed to connect!")
             return
+
+        # Open local browser for Marketing mode
+        if task_mode == TaskMode.Marketing:
+            url = "http://localhost:3000"
+            try:
+                if self._open_browser_smart(url, options):
+                    print(f"🌐 Opened local browser to {url} for Marketing mode")
+                    logger.info(f"Opened local browser to {url} for Marketing mode")
+                else:
+                    # Fallback to standard webbrowser.open()
+                    webbrowser.open(url)
+                    print(
+                        f"🌐 Opened browser to {url} for Marketing mode (fallback method)"
+                    )
+                    logger.info(
+                        f"Opened browser to {url} for Marketing mode (fallback method)"
+                    )
+            except Exception as e:
+                print(f"⚠️  Failed to open local browser: {e}")
+                logger.warning(f"Failed to open local browser for Marketing mode: {e}")
 
         # Start the task
         self._start_task(initial_task, team_id, attachments or [], task_mode)
@@ -573,3 +620,232 @@ class TaskRunner:
             if log.source == "plan_manager":
                 plan_history.append(log.model_dump())
         return plan_history
+
+    def _open_browser_smart(self, url: str, options: TaskExecutionOptions) -> bool:
+        """
+        Smart browser opening that tries to use existing browser instances to preserve cookies.
+
+        Args:
+            url: URL to open
+            options: Task execution options containing browser preferences
+
+        Returns:
+            bool: True if successfully opened, False otherwise
+        """
+        if not options.use_existing_browser:
+            # Fall back to standard webbrowser.open()
+            try:
+                webbrowser.open(url)
+                return True
+            except Exception:
+                return False
+
+        # Platform-specific smart opening
+        system = platform.system().lower()
+
+        if system == "darwin":  # macOS
+            return self._open_browser_macos(url, options.preferred_browser)
+        elif system == "windows":
+            return self._open_browser_windows(url, options.preferred_browser)
+        elif system == "linux":
+            return self._open_browser_linux(url, options.preferred_browser)
+
+        # Universal fallback
+        try:
+            webbrowser.open(url)
+            return True
+        except Exception:
+            return False
+
+    def _open_browser_macos(
+        self, url: str, preferred_browser: Optional[str] = None
+    ) -> bool:
+        """Open URL in existing browser instance on macOS using AppleScript."""
+        browsers_to_try = []
+
+        if preferred_browser:
+            browsers_to_try.append(preferred_browser.lower())
+
+        # Default browser order for macOS
+        browsers_to_try.extend(["chrome", "safari", "firefox", "edge"])
+
+        for browser in browsers_to_try:
+            if self._try_open_browser_macos(url, browser):
+                return True
+
+        return False
+
+    def _try_open_browser_macos(self, url: str, browser: str) -> bool:
+        """Try to open URL in a specific browser on macOS."""
+        try:
+            if browser == "chrome":
+                applescript = f'''
+                tell application "Google Chrome"
+                    if it is running then
+                        if (count of windows) > 0 then
+                            tell window 1 to make new tab with properties {{URL:"{url}"}}
+                        else
+                            make new window with properties {{URL:"{url}"}}
+                        end if
+                        activate
+                        return true
+                    end if
+                end tell
+                '''
+            elif browser == "safari":
+                applescript = f'''
+                tell application "Safari"
+                    if it is running then
+                        if (count of windows) > 0 then
+                            tell window 1 to make new tab with properties {{URL:"{url}"}}
+                        else
+                            make new document with properties {{URL:"{url}"}}
+                        end if
+                        activate
+                        return true
+                    end if
+                end tell
+                '''
+            elif browser == "firefox":
+                # Firefox doesn't support AppleScript as well, try command line
+                subprocess.run(
+                    ["open", "-a", "Firefox", "--args", "--new-tab", url],
+                    check=True,
+                    timeout=5,
+                    capture_output=True,
+                )
+                return True
+            elif browser == "edge":
+                applescript = f'''
+                tell application "Microsoft Edge"
+                    if it is running then
+                        if (count of windows) > 0 then
+                            tell window 1 to make new tab with properties {{URL:"{url}"}}
+                        else
+                            make new window with properties {{URL:"{url}"}}
+                        end if
+                        activate
+                        return true
+                    end if
+                end tell
+                '''
+            else:
+                return False
+
+            if browser in ["chrome", "safari", "edge"]:
+                result = subprocess.run(
+                    ["osascript", "-e", applescript],
+                    check=True,
+                    timeout=5,
+                    capture_output=True,
+                    text=True,
+                )
+
+                # Check if the script returned success
+                return "true" in result.stdout.lower() or result.returncode == 0
+
+        except Exception as e:
+            logger.debug(f"Failed to open {browser} on macOS: {e}")
+            return False
+
+        return False
+
+    def _open_browser_windows(
+        self, url: str, preferred_browser: Optional[str] = None
+    ) -> bool:
+        """Open URL in existing browser instance on Windows."""
+        browsers_to_try = []
+
+        if preferred_browser:
+            browsers_to_try.append(preferred_browser.lower())
+
+        browsers_to_try.extend(["chrome", "edge", "firefox"])
+
+        for browser in browsers_to_try:
+            if self._try_open_browser_windows(url, browser):
+                return True
+
+        return False
+
+    def _try_open_browser_windows(self, url: str, browser: str) -> bool:
+        """Try to open URL in a specific browser on Windows."""
+        try:
+            if browser == "chrome":
+                subprocess.run(
+                    ["start", "chrome", "--new-tab", url],
+                    shell=True,
+                    check=True,
+                    timeout=5,
+                )
+                return True
+            elif browser == "edge":
+                subprocess.run(
+                    ["start", "msedge", "--new-tab", url],
+                    shell=True,
+                    check=True,
+                    timeout=5,
+                )
+                return True
+            elif browser == "firefox":
+                subprocess.run(
+                    ["start", "firefox", "-new-tab", url],
+                    shell=True,
+                    check=True,
+                    timeout=5,
+                )
+                return True
+        except Exception as e:
+            logger.debug(f"Failed to open {browser} on Windows: {e}")
+            return False
+
+        return False
+
+    def _open_browser_linux(
+        self, url: str, preferred_browser: Optional[str] = None
+    ) -> bool:
+        """Open URL in existing browser instance on Linux."""
+        browsers_to_try = []
+
+        if preferred_browser:
+            browsers_to_try.append(preferred_browser.lower())
+
+        browsers_to_try.extend(["chrome", "firefox", "chromium"])
+
+        for browser in browsers_to_try:
+            if self._try_open_browser_linux(url, browser):
+                return True
+
+        return False
+
+    def _try_open_browser_linux(self, url: str, browser: str) -> bool:
+        """Try to open URL in a specific browser on Linux."""
+        try:
+            if browser == "chrome":
+                subprocess.run(
+                    ["google-chrome", "--new-tab", url],
+                    check=True,
+                    timeout=5,
+                    capture_output=True,
+                )
+                return True
+            elif browser == "firefox":
+                subprocess.run(
+                    ["firefox", "-new-tab", url],
+                    check=True,
+                    timeout=5,
+                    capture_output=True,
+                )
+                return True
+            elif browser == "chromium":
+                subprocess.run(
+                    ["chromium-browser", "--new-tab", url],
+                    check=True,
+                    timeout=5,
+                    capture_output=True,
+                )
+                return True
+        except Exception as e:
+            logger.debug(f"Failed to open {browser} on Linux: {e}")
+            return False
+
+        return False
