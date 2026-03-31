@@ -11,6 +11,7 @@ This example demonstrates the new simplified task execution interface:
 
 import logging
 import os
+from typing import Optional
 
 from wyseos.mate import Client, ClientOptions, create_task_runner
 from wyseos.mate.config import load_config
@@ -148,21 +149,13 @@ def main():
         print("  Error: task is required")
         return
 
-    session_info = session_operations(client, "wyse_mate", task)
+    print("\n5. Task Mode")
+    selected_task_mode = TaskMode.Marketing
+    print("Using Marketing mode by default")
 
-    print("\n5. Task Mode Selection")
-    print("Available task modes:")
-    print("  1. Default - Standard mode")
-    print("  2. DeepSearch - Enhanced deep research mode")
-    print("  3. Marketing - Marketing-focused mode")
-
-    task_mode_choice = input("Choose task mode (1-3, default: 1): ").strip()
-    if task_mode_choice == "2":
-        selected_task_mode = TaskMode.DeepSearch
-    elif task_mode_choice == "3":
-        selected_task_mode = TaskMode.Marketing
-    else:
-        selected_task_mode = TaskMode.Default
+    # Create session with mode and platform
+    mode = selected_task_mode.value
+    session_info = session_operations(client, task, mode=mode, platform="api")
 
     print("\n6. Task Execution")
     execution_mode = input(
@@ -206,17 +199,15 @@ def agent_operations(client: Client):
         print(f"    - {agent.name} (ID: {agent.agent_id})")
 
 
-def session_operations(client: Client, team_id: str, task: str) -> SessionInfo:
+def session_operations(
+    client: Client, task: str, mode: Optional[str] = None, platform: Optional[str] = None
+) -> SessionInfo:
     """Create a session and fetch its info."""
-
-    create_resp = client.session.create(
-        CreateSessionRequest(team_id=team_id, task=task)
-    )
+    req = CreateSessionRequest(task=task, mode=mode, platform=platform)
+    create_resp = client.session.create(req)
     session_id = create_resp.session_id
     session_details = client.session.get_info(session_id)
-    print(
-        f"Created new session: {session_id}, Team ID: {team_id}, Status: {session_details.status}"
-    )
+    print(f"Created new session: {session_id}, Status: {session_details.status}")
     return session_details
 
 
@@ -224,7 +215,7 @@ def run_automated_task(
     client: Client,
     session_info: SessionInfo,
     task: str,
-    uploaded_files: list = None,
+    uploaded_files: Optional[list] = None,
     task_mode: TaskMode = TaskMode.Default,
 ):
     """Run an automated task execution and return results."""
@@ -232,20 +223,20 @@ def run_automated_task(
 
     ws_client = WebSocketClient(
         base_url=client.base_url,
-        api_key=client.api_key,
+        api_key=client.api_key or "",
+        jwt_token=client.jwt_token or "",
         session_id=session_info.session_id,
         heartbeat_interval=30,
     )
 
     task_runner = create_task_runner(ws_client, client, session_info)
 
-    # Configure options for automated execution
     options = TaskExecutionOptions(
         auto_accept_plan=True,
-        capture_screenshots=False,  # Disabled for performance
+        capture_screenshots=False,
         enable_browser_logging=True,
         enable_event_logging=True,
-        completion_timeout=300,  # 5 minutes
+        completion_timeout=300,
     )
 
     print(f"Starting task: {task}")
@@ -256,13 +247,11 @@ def run_automated_task(
     try:
         result = task_runner.run_task(
             task=task,
-            team_id=session_info.team_id,
             attachments=uploaded_files or [],
             task_mode=task_mode,
             options=options,
         )
 
-        # Display results
         if result.success:
             print("\n✓ Task completed successfully!")
             print(f"Final Answer: {result.final_answer}")
@@ -282,13 +271,12 @@ def run_interactive_session(
     client: Client,
     session_info: SessionInfo,
     task: str,
-    uploaded_files: list = None,
+    uploaded_files: Optional[list] = None,
     task_mode: TaskMode = TaskMode.Default,
 ):
     """Run an interactive session with user input support."""
     print("\n--- Interactive Session ---")
 
-    # Ask user about screenshot capture
     capture_choice = (
         input("Enable screenshot capture? (y/n, default: n): ").strip().lower()
     )
@@ -296,20 +284,20 @@ def run_interactive_session(
 
     ws_client = WebSocketClient(
         base_url=client.base_url,
-        api_key=client.api_key,
+        api_key=client.api_key or "",
+        jwt_token=client.jwt_token or "",
         session_id=session_info.session_id,
         heartbeat_interval=30,
     )
 
     task_runner = create_task_runner(ws_client, client, session_info)
 
-    # Configure options for interactive session
     options = TaskExecutionOptions(
         auto_accept_plan=False,
         capture_screenshots=capture_screenshots,
         enable_browser_logging=True,
         enable_event_logging=True,
-        completion_timeout=600,  # 10 minutes for interactive sessions
+        completion_timeout=600,
     )
 
     print(f"Task mode: {task_mode.value if task_mode.value else 'Default'}")
@@ -321,7 +309,6 @@ def run_interactive_session(
     try:
         task_runner.run_interactive_session(
             initial_task=task,
-            team_id=session_info.team_id,
             attachments=uploaded_files or [],
             task_mode=task_mode,
             options=options,

@@ -12,6 +12,7 @@ import requests
 from ..constants import (
     DEFAULT_TIMEOUT,
     HEADER_API_KEY,
+    HEADER_AUTHORIZATION,
     HEADER_USER_AGENT,
 )
 from ..errors import APIError
@@ -189,7 +190,9 @@ class FileUploadService:
                     HEADER_USER_AGENT: self.client.user_agent,
                 }
 
-                if self.client.api_key:
+                if self.client.jwt_token:
+                    headers[HEADER_AUTHORIZATION] = self.client.jwt_token
+                elif self.client.api_key:
                     headers[HEADER_API_KEY] = self.client.api_key
 
                 # 注意：使用multipart/form-data时不要手动设置Content-Type
