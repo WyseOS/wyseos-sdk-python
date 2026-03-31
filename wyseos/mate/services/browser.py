@@ -136,10 +136,13 @@ class BrowserService:
             )
             data = msg.get("message", {}).get("data", {}) or {}
             action = data.get("action", "unknown")
-            screenshot = data.get("screenshot", "none")
+            screenshot = data.get("screenshot")
 
             print(f"    content: {content}")
             print(f"    action: {action}")
-            print(f"    screenshot: {screenshot}")
+            if isinstance(screenshot, str) and screenshot:
+                print(f"    screenshot: <omitted, {len(screenshot)} chars>")
+            else:
+                print("    screenshot: none")
         except Exception:
             print("    Browser: Error printing info")
