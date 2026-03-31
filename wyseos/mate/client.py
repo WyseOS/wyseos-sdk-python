@@ -15,6 +15,7 @@ from .constants import (
     DEFAULT_TIMEOUT,
     HEADER_ACCEPT,
     HEADER_API_KEY,
+    HEADER_AUTHORIZATION,
     HEADER_CONTENT_TYPE,
     HEADER_USER_AGENT,
 )
@@ -22,6 +23,7 @@ from .errors import APIError
 from .services.agent import AgentService
 from .services.browser import BrowserService
 from .services.file_upload import FileUploadService
+from .services.marketing import MarketingService
 from .services.session import SessionService
 from .services.team import TeamService
 from .services.user import UserService
@@ -38,8 +40,9 @@ class Client:
 
         self.base_url = options.base_url or DEFAULT_BASE_URL
         self.api_key = options.api_key
+        self.jwt_token = options.jwt_token
         self.timeout = options.timeout or DEFAULT_TIMEOUT
-        self.user_agent = "WyseOSPython/0.2.0"  # Set user_agent directly
+        self.user_agent = "WyseOSPython/0.2.0"
         self.http_client = requests.Session()
 
         # Initialize services
@@ -49,6 +52,7 @@ class Client:
         self.session = SessionService(self)
         self.browser = BrowserService(self)
         self.file_upload = FileUploadService(self)
+        self.marketing = MarketingService(self)
 
     def _do_request(
         self, method: str, endpoint: str, body: Optional[Dict] = None
@@ -61,7 +65,9 @@ class Client:
             HEADER_ACCEPT: CONTENT_TYPE_JSON,
         }
 
-        if self.api_key:
+        if self.jwt_token:
+            headers[HEADER_AUTHORIZATION] = self.jwt_token
+        elif self.api_key:
             headers[HEADER_API_KEY] = self.api_key
 
         try:
