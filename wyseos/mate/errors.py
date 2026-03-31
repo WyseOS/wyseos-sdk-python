@@ -159,3 +159,27 @@ class ServerError(APIError):
 
     def __init__(self, message: str = "Internal server error", **kwargs):
         super().__init__(message, **kwargs)
+
+
+class SessionExecutionError(APIError):
+    """Error received during WebSocket session execution (type="error")."""
+
+    def __init__(
+        self,
+        message: str,
+        code: Optional[int] = None,
+        message_id: Optional[str] = None,
+        source: Optional[str] = None,
+        **kwargs,
+    ):
+        super().__init__(message, code=code, **kwargs)
+        self.message_id = message_id
+        self.source = source
+
+    def __str__(self) -> str:
+        parts = [f"SessionExecutionError: {self.message}"]
+        if self.code:
+            parts.append(f"Code: {self.code}")
+        if self.source:
+            parts.append(f"Source: {self.source}")
+        return " | ".join(parts)

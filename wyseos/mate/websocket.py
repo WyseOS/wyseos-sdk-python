@@ -58,10 +58,14 @@ class MessageType:
     PAUSE = "pause"
     STOP = "stop"
     TASK_RESULT = "task_result"
+    PROGRESS = "progress"
+    WARNING = "warning"
+    ERROR = "error"
 
 
 class PlanType:
     CREATE_PLAN = "create_plan"
+    UPDATE_PLAN = "update_plan"
     UPDATE_TASK_STATUS = "update_task_status"
 
 
@@ -76,13 +80,15 @@ class WebSocketClient:
     def __init__(
         self,
         base_url: str,
-        api_key: str,
-        session_id: str,
+        api_key: str = "",
+        session_id: str = "",
+        jwt_token: str = "",
         heartbeat_interval: int = WEBSOCKET_HEARTBEAT_INTERVAL,
         max_message_size: int = WEBSOCKET_MAX_MESSAGE_SIZE,
     ):
         self.base_url = base_url
         self.api_key = api_key
+        self.jwt_token = jwt_token
         self.session_id = session_id
         self.heartbeat_interval = heartbeat_interval
         self.max_message_size = max_message_size
@@ -133,6 +139,38 @@ class WebSocketClient:
                 "input_type": InputType.PLAN,
                 "request_id": request_id,
                 "response": accept.model_dump(exclude_none=True),
+            },
+        }
+
+    @staticmethod
+    def create_text_input_response(
+        request_id: str,
+        text: str,
+        attachments: Optional[list] = None,
+        skills: Optional[list] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "type": MessageType.INPUT,
+            "data": {
+                "input_type": InputType.TEXT,
+                "text": text,
+                "request_id": request_id,
+                "attachments": attachments or [],
+                "skills": skills or [],
+            },
+        }
+
+    @staticmethod
+    def create_x_confirm_response(
+        request_id: str, content: str = ""
+    ) -> Dict[str, Any]:
+        # x_confirm uses input_type="plan" with accepted=true per protocol section 2c
+        return {
+            "type": MessageType.INPUT,
+            "data": {
+                "input_type": InputType.PLAN,
+                "request_id": request_id,
+                "response": {"accepted": True, "content": content},
             },
         }
 
@@ -400,7 +438,10 @@ class WebSocketClient:
 
         ws_base_url = f"{ws_scheme}://{parsed.netloc}"
         endpoint = ENDPOINT_SESSION_WEBSOCKET.format(session_id=self.session_id)
-        full_url = f"{urljoin(ws_base_url, endpoint)}?api_key={self.api_key}"
+        if self.jwt_token:
+            full_url = f"{urljoin(ws_base_url, endpoint)}?authorization={self.jwt_token}"
+        else:
+            full_url = f"{urljoin(ws_base_url, endpoint)}?api_key={self.api_key}"
 
         return full_url
 

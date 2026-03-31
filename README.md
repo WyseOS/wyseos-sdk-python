@@ -1,321 +1,163 @@
-# 🤖 WyseOS SDK for Python
+# WyseOS SDK for Python
 
-[![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/downloads/)
-[![PyPI Package](https://img.shields.io/pypi/v/wyseos-sdk)](https://pypi.org/project/wyseos-sdk/)
-[![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
-[![Downloads](https://img.shields.io/pypi/dm/wyseos-sdk)](https://pypi.org/project/wyseos-sdk/)
-[![Documentation](https://img.shields.io/badge/docs-comprehensive-green)](./examples/quickstart.md)
+Official Python SDK for WyseOS session protocol and real-time task execution.
 
-**The official Python SDK for WyseOS** - Build intelligent AI-powered applications with seamless API integration, real-time WebSocket support, and simplified task execution.
+## Highlights
 
-> 🚀 **New in v0.2.1**: Simplified task execution interface with `TaskRunner` - execute complex AI tasks with just a few lines of code!
+- HTTP + WebSocket workflow aligned with `docs/wyse-session-protocol.md`
+- `CreateSessionRequest(task, mode, platform, extra)`
+- API Key and JWT dual authentication
+- `TaskRunner` for automated and interactive execution
+- Marketing rich-stream support (`marketing_tweet_reply`, `marketing_tweet_interact`, `writer_twitter`)
+- Marketing data APIs and dashboard APIs
 
-## ✨ What is WyseOS?
-
-WyseOS is an advanced AI platform that enables developers to build sophisticated AI agents and workflows. The Python SDK provides:
-
-- 🎯 **Intelligent Task Execution** - Run complex AI tasks with automatic plan acceptance
-- 🔄 **Real-time Communication** - WebSocket integration for live AI interactions  
-- 📂 **File Processing** - Upload and analyze documents, images, and data files
-- 🌐 **Browser Automation** - AI-powered web browsing and data extraction
-- 👥 **Team Management** - Organize AI agents and workflows by teams
-- 🛡️ **Enterprise Ready** - Type-safe, robust error handling, and comprehensive logging
-
-## 🚀 Quick Start
-
-### Installation
+## Installation
 
 ```bash
 pip install wyseos-sdk
 ```
 
-### 30-Second Example
+See full install guide: `installation.md`.
+
+## Quick Start
 
 ```python
-from wyseos.mate import Client
+from wyseos.mate import Client, create_task_runner
 from wyseos.mate.config import load_config
 from wyseos.mate.models import CreateSessionRequest
-from wyseos.mate.websocket import WebSocketClient, TaskExecutionOptions
+from wyseos.mate.task_runner import TaskExecutionOptions, TaskMode
+from wyseos.mate.websocket import WebSocketClient
 
-# Initialize client
+# 1) Initialize client
 client = Client(load_config("mate.yaml"))
 
-# Create session
-session = client.session.create(
-    CreateSessionRequest(team_id="wyse_mate", task="Analyze market trends")
+# 2) Create session (latest protocol fields)
+req = CreateSessionRequest(
+    task="Draft a Twitter launch campaign for my product",
+    mode="marketing",
+    platform="api",
+    extra={"marketing_product": {"product_id": "prod_123"}},
 )
+session = client.session.create(req)
 session_info = client.session.get_info(session.session_id)
 
-# Execute AI task
+# 3) Connect websocket + task runner
 ws_client = WebSocketClient(
     base_url=client.base_url,
-    api_key=client.api_key,
-    session_id=session_info.session_id
+    api_key=client.api_key or "",
+    jwt_token=client.jwt_token or "",
+    session_id=session_info.session_id,
 )
-task_runner = ws_client.create_task_runner(client, session_info)
+task_runner = create_task_runner(ws_client, client, session_info)
 
+# 4) Execute task
 result = task_runner.run_task(
-    task="Analyze Q4 2024 market trends in tech sector",
-    team_id="wyse_mate",
-    options=TaskExecutionOptions(auto_accept_plan=True)
+    task="Generate 3 tweet drafts and 5 candidate replies",
+    task_mode=TaskMode.Marketing,
+    extra=req.extra,
+    options=TaskExecutionOptions(auto_accept_plan=True, completion_timeout=300),
 )
 
 if result.success:
-    print(f"✅ Analysis complete: {result.final_answer}")
-    print(f"⏱️ Completed in {result.session_duration:.1f} seconds")
+    print("final_answer:", result.final_answer)
 else:
-    print(f"❌ Task failed: {result.error}")
+    print("error:", result.error)
 ```
 
-**🎯 [Complete Quick Start Guide →](./examples/quickstart.md)**
+More examples: `examples/quickstart.md` and `examples/getting_started/example.py`.
 
-## 🎮 Key Features
+## Authentication
 
-### 🤖 Simplified Task Execution
+Use one of the following in `ClientOptions` / `mate.yaml`:
 
-Execute complex AI workflows with minimal code:
+- `api_key`
+- `jwt_token`
+
+Behavior:
+
+- HTTP:
+  - `api_key` -> `x-api-key`
+  - `jwt_token` -> `Authorization`
+- WebSocket URL query:
+  - `?api_key=...`
+  - `?authorization=...`
+
+## Session Protocol Flow
+
+Typical flow:
+
+1. `client.session.create(...)` to get `session_id`
+2. Connect `WebSocketClient`
+3. Send `start`
+4. Receive `plan / input / progress / rich / text`
+5. Receive `task_result`
+6. Optionally receive `follow_up_suggestion`
+
+For full message schema and rich types, see `docs/wyse-session-protocol.md`.
+
+## Task Runner API
+
+`TaskRunner` is created via:
 
 ```python
-# Automated execution - fire and forget
-result = task_runner.run_task(
-    task="Create a comprehensive market analysis report",
-    team_id="wyse_mate",
-    options=TaskExecutionOptions(auto_accept_plan=True)
-)
-
-# Interactive execution - with user input
-task_runner.run_interactive_session(
-    initial_task="Help me research competitors",
-    team_id="wyse_mate"
-)
+task_runner = create_task_runner(ws_client, client, session_info)
 ```
 
-### 📂 File Upload & Processing
+Main methods:
+
+- `run_task(task, attachments=None, task_mode=TaskMode.Default, extra=None, options=None) -> TaskResult`
+- `run_interactive_session(initial_task, attachments=None, task_mode=TaskMode.Default, extra=None, options=None)`
+
+`TaskExecutionOptions` includes:
+
+- `auto_accept_plan`
+- `capture_screenshots`
+- `enable_event_logging`
+- `completion_timeout`
+- browser launch preferences for interactive mode
+
+## Marketing APIs
+
+Session-scoped generated content:
 
 ```python
-# Upload files for AI analysis
-uploaded_files = []
-upload_result = client.file_upload.upload_file("data.csv")
-if upload_result.get("file_url"):
-    uploaded_files.append({
-        "file_name": "data.csv",
-        "file_url": upload_result["file_url"]
-    })
-
-# Use files in task execution
-result = task_runner.run_task(
-    task="Analyze this dataset and create visualizations",
-    attachments=uploaded_files,
-    team_id="wyse_mate"
-)
+client.session.get_marketing_data(session_id, type="reply")
+client.session.get_marketing_data(session_id, type="like")
+client.session.get_marketing_data(session_id, type="retweet")
+client.session.get_marketing_data(session_id, type="tweet")
 ```
 
-### ⚡ Real-time WebSocket Integration
+Dashboard APIs:
 
 ```python
-from wyseos.mate.websocket import WebSocketClient, MessageType
-
-ws = WebSocketClient(
-    base_url=client.base_url,
-    api_key=client.api_key,
-    session_id=session_id
-)
-
-ws.set_message_handler(lambda msg: print(f"AI Agent: {msg.get('content')}"))
-ws.connect(session_id)
+client.marketing.get_product_info(product_id)
+client.marketing.get_report_detail(report_id)
+client.marketing.update_report(report_id, data)
+client.marketing.get_research_tweets(query_id)
 ```
 
-### 🔧 Flexible Configuration
+## Services Overview
 
-```yaml
-# mate.yaml
-mate:
-  api_key: "your-api-key"
-  base_url: "https://api.wyseos.com"
-  timeout: 30
-```
+- `client.user` - API keys
+- `client.team` - team list/info
+- `client.agent` - agent list/info
+- `client.session` - create/info/messages/marketing data
+- `client.browser` - browser APIs
+- `client.file_upload` - upload and validation
+- `client.marketing` - dashboard marketing APIs
 
-```python
-# Configuration options
-options = TaskExecutionOptions(
-    auto_accept_plan=True,           # ✅ Auto-approve AI plans
-    capture_screenshots=False,        # 📸 Browser screenshots
-    enable_browser_logging=True,      # 🌐 Browser activity logs
-    completion_timeout=300,           # ⏱️ Task timeout
-)
-```
+## Error Types
 
-## 📚 Documentation & Examples
+- `APIError`
+- `NetworkError`
+- `WebSocketError`
+- `ConfigError`
+- `SessionExecutionError`
 
-| Resource | Description |
-|----------|-------------|
-| **[🚀 Quick Start Guide](./examples/quickstart.md)** | Get up and running in 5 minutes |
-| **[📖 Installation Guide](./installation.md)** | Detailed installation instructions |
-| **[🎯 Complete Example](./examples/getting_started/example.py)** | Full-featured example application |
-| **[📋 Release Notes](./RELEASES.md)** | Latest updates and changes |
+## Documentation
 
-### 🎪 Example Applications
-
-The `examples/` directory contains real-world usage patterns:
-
-- **📊 Data Analysis**: Upload CSV files and get AI-powered insights
-- **🌐 Web Research**: Automated web browsing and data extraction  
-- **📝 Document Processing**: Analyze PDFs, images, and text files
-- **💬 Interactive Sessions**: Build chatbot-like experiences
-- **🔄 Workflow Automation**: Chain multiple AI tasks together
-
-## 🛠️ Development & Contributing
-
-### Development Setup
-
-```bash
-# Clone repository
-git clone https://github.com/WyseOS/wyseos-sdk-python
-cd wyseos-sdk-python
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-
-# Install in development mode
-pip install -e .
-
-# Install development tools (optional)
-pip install pytest pytest-cov black isort flake8 mypy
-```
-
-### Testing
-
-```bash
-# Run tests
-pytest
-
-# With coverage
-pytest --cov=wyseos
-```
-
-### Contributing
-
-We welcome contributions! Please:
-
-1. 🍴 Fork the repository
-2. 🌿 Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. 💾 Commit your changes (`git commit -m 'Add amazing feature'`)
-4. 📤 Push to the branch (`git push origin feature/amazing-feature`)
-5. 🔄 Open a Pull Request
-
-## 📊 Project Status
-
-| Component | Status |
-|-----------|--------|
-| 🔧 Core SDK | ✅ Complete |
-| 🌐 WebSocket Support | ✅ Complete |
-| 📁 File Upload | ✅ Complete |
-| 🤖 Task Execution | ✅ Complete |
-| 📚 Documentation | ✅ Complete |
-| 🧪 Test Coverage | 🚧 In Progress |
-| 📱 Mobile Examples | 📋 Planned |
-
-## 🏗️ Architecture
-
-```
-wyseos/
-├── mate/                    # Core SDK module
-│   ├── client.py           # Main API client
-│   ├── websocket.py        # WebSocket + TaskRunner
-│   ├── models.py           # Pydantic data models
-│   ├── config.py           # Configuration management
-│   ├── errors.py           # Exception classes
-│   └── services/           # API service modules
-│       ├── user.py         # User management
-│       ├── team.py         # Team operations
-│       ├── agent.py        # AI agent management
-│       ├── session.py      # Session handling
-│       ├── browser.py      # Browser automation
-│       └── file_upload.py  # File operations
-```
-
-## 🔗 API Reference
-
-### Core Classes
-
-| Class | Purpose |
-|-------|---------|
-| `Client` | Main API client for HTTP requests |
-| `WebSocketClient` | Real-time WebSocket communication |
-| `TaskRunner` | Simplified task execution interface |
-| `TaskExecutionOptions` | Configuration for task execution |
-| `TaskResult` | Comprehensive task execution results |
-
-### Key Methods
-
-```python
-# Client operations
-client.user.list_api_keys()
-client.team.get_list()
-client.agent.get_list()
-client.session.create()
-
-# File operations
-client.file_upload.validate_file()
-client.file_upload.upload_file()
-
-# Task execution
-task_runner.run_task()              # Automated execution
-task_runner.run_interactive_session()  # Interactive mode
-```
-
-## 🚨 Error Handling
-
-The SDK provides structured error handling:
-
-```python
-from wyseos.mate.errors import APIError, ValidationError, NetworkError
-
-try:
-    result = task_runner.run_task("Your task")
-except ValidationError as e:
-    print(f"Validation error: {e}")
-except APIError as e:
-    print(f"API error: {e.message}")
-except NetworkError as e:
-    print(f"Network error: {e}")
-```
-
-## 🌟 What's New in v0.2.0
-
-- 🎯 **New TaskRunner Interface**: Execute AI tasks with 90% less code
-- ⚡ **Performance Optimizations**: Screenshots disabled by default for faster execution
-- 🔧 **Simplified Configuration**: Cleaner options with intelligent defaults
-- 📚 **Enhanced Documentation**: Complete rewrite with practical examples
-- 🏗️ **Improved Architecture**: Better separation of concerns and modularity
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support & Community
-
-- 🐛 **Issues**: [GitHub Issues](https://github.com/WyseOS/wyseos-sdk-python/issues)
-- 📧 **Email**: support@wyseos.com
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/WyseOS/wyseos-sdk-python/discussions)
-- 📖 **Documentation**: [API Docs](https://docs.wyseos.com)
-
-## 🔗 Related Projects
-
-- 🌐 **WyseOS Platform**: [wyseos.com](https://wyseos.com)
-- 📦 **PyPI Package**: [pypi.org/project/wyseos-sdk](https://pypi.org/project/wyseos-sdk/)
-- 🧪 **JavaScript SDK**: Coming soon
-- 🔗 **REST API**: [docs.wyseos.com](https://docs.wyseos.com)
-
----
-
-<div align="center">
-
-**🚀 Ready to build the future with AI?**
-
-[Get Started](./examples/quickstart.md) • [View Examples](./examples/) • [API Docs](https://docs.wyseos.com)
-
-Built with ❤️ by the WyseOS team
-
-</div>
+- Protocol: `docs/wyse-session-protocol.md`
+- Upgrade notes: `docs/session_protocol_upgrade.md`
+- Quick Start: `examples/quickstart.md`
+- Installation: `installation.md`
+- Full Example: `examples/getting_started/example.py`

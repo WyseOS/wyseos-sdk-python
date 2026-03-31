@@ -31,6 +31,10 @@ class ClientOptions(BaseModel):
         default=None,
         min_length=1,
     )
+    jwt_token: Optional[str] = Field(
+        default=None,
+        min_length=1,
+    )
     base_url: str = Field(
         default=DEFAULT_BASE_URL,
         min_length=1,

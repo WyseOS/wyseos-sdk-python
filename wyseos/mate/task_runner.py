@@ -14,10 +14,20 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
+from .constants import (
+    RICH_TYPE_FOLLOW_UP_SUGGESTION,
+    RICH_TYPE_MARKETING_TWEET_INTERACT,
+    RICH_TYPE_MARKETING_TWEET_REPLY,
+    RICH_TYPE_WRITER_TWITTER,
+)
+from .errors import SessionExecutionError
 from .plan import Plan
-from .websocket import EventLog, MessageType, WebSocketClient
+from .websocket import EventLog, InputType, MessageType, PlanType, WebSocketClient
 
 logger = logging.getLogger(__name__)
+FOLLOW_UP_GRACE_SECONDS = 1.5
+CONNECT_WAIT_TIMEOUT_SECONDS = 10.0
+CONNECT_POLL_INTERVAL_SECONDS = 0.05
 
 
 class TaskExecutionOptions(BaseModel):
@@ -75,13 +85,51 @@ class TaskRunner:
         self._execution_logs: List[EventLog] = []
         self._raw_messages: List[Dict[str, Any]] = []
         self._start_time = 0.0
+        self._pending_request_id: Optional[str] = None
+        self._pending_input_type: str = InputType.TEXT
+        self._pending_request_at: float = 0.0
+        self._marketing_chunk_buffers: Dict[str, Any] = {}
+
+    def _wait_until_connected(self, timeout_seconds: float = CONNECT_WAIT_TIMEOUT_SECONDS) -> bool:
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            if self.ws_client.connected:
+                return True
+            if self.ws_client.thread and not self.ws_client.thread.is_alive():
+                break
+            time.sleep(CONNECT_POLL_INTERVAL_SECONDS)
+        return self.ws_client.connected
+
+    def _check_user_input_timeout(
+        self,
+        options: TaskExecutionOptions,
+        result_container: Dict,
+        completion_events: Dict,
+    ) -> None:
+        if options.max_user_input_timeout <= 0 or not self._pending_request_id:
+            return
+        if self._pending_request_at <= 0:
+            self._pending_request_at = time.time()
+            return
+        elapsed = time.time() - self._pending_request_at
+        if elapsed < options.max_user_input_timeout:
+            return
+
+        msg = f"User input timeout after {options.max_user_input_timeout} seconds"
+        logger.warning(msg)
+        result_container["has_error"] = True
+        result_container["error"] = msg
+        self._pending_request_id = None
+        self._pending_input_type = InputType.TEXT
+        self._pending_request_at = 0.0
+        completion_events["error"].set()
 
     def run_task(
         self,
         task: str,
-        team_id: str,
         attachments: List[Dict] = None,
         task_mode: TaskMode = TaskMode.Default,
+        extra: Optional[Dict[str, Any]] = None,
         options: TaskExecutionOptions = None,
     ) -> TaskResult:
         """Execute a single task and return complete result."""
@@ -105,6 +153,14 @@ class TaskRunner:
         self._start_time = time.time()
         self._execution_logs = []
         self._raw_messages = []
+        self._pending_request_id = None
+        self._pending_input_type = InputType.TEXT
+        self._pending_request_at = 0.0
+        self._marketing_chunk_buffers = {
+            RICH_TYPE_MARKETING_TWEET_REPLY: [],
+            RICH_TYPE_MARKETING_TWEET_INTERACT: [],
+            RICH_TYPE_WRITER_TWITTER: {},
+        }
 
         def on_message(message):
             self._handle_message(message, result_container, completion_events, options)
@@ -127,9 +183,7 @@ class TaskRunner:
 
         # Connect and start task
         self.ws_client.connect(self.session_info.session_id)
-        time.sleep(2)  # Allow connection to establish
-
-        if not self.ws_client.connected:
+        if not self._wait_until_connected():
             return TaskResult(
                 success=False,
                 error="Failed to establish WebSocket connection",
@@ -152,23 +206,42 @@ class TaskRunner:
                 logger.warning(f"Failed to open local browser for Marketing mode: {e}")
 
         # Start the task
-        self._start_task(task, team_id, attachments or [], task_mode)
+        self._start_task(task, attachments or [], task_mode, extra)
 
         # Wait for completion
         timeout = options.completion_timeout
         try:
-            if completion_events["task_completed"].wait(timeout=timeout):
-                success = True
-                error = None
-            elif completion_events["error"].wait(timeout=0.1):
-                success = False
-                error = result_container.get("error", "Unknown error")
-            elif completion_events["connection_closed"].wait(timeout=0.1):
-                success = result_container["task_completed"]
-                error = None if success else "Connection closed before completion"
-            else:
-                success = False
-                error = f"Task timeout after {timeout} seconds"
+            deadline = time.time() + timeout
+            while True:
+                self._check_user_input_timeout(options, result_container, completion_events)
+                if completion_events["error"].is_set():
+                    success = False
+                    error = result_container.get("error", "Unknown error")
+                    break
+                if completion_events["task_completed"].is_set():
+                    completed_at = result_container.get("task_completed_at", 0.0)
+                    follow_up_received = bool(result_container.get("follow_up_received"))
+                    if (
+                        follow_up_received
+                        or time.time() - completed_at >= FOLLOW_UP_GRACE_SECONDS
+                        or completion_events["connection_closed"].is_set()
+                    ):
+                        success = not result_container.get("stopped", False)
+                        error = (
+                            "Task was stopped"
+                            if result_container.get("stopped")
+                            else None
+                        )
+                        break
+                if completion_events["connection_closed"].is_set():
+                    success = result_container["task_completed"]
+                    error = None if success else "Connection closed before completion"
+                    break
+                if time.time() >= deadline:
+                    success = False
+                    error = f"Task timeout after {timeout} seconds"
+                    break
+                time.sleep(0.05)
         except Exception as e:
             success = False
             error = f"Task execution failed: {str(e)}"
@@ -193,9 +266,9 @@ class TaskRunner:
     def run_interactive_session(
         self,
         initial_task: str,
-        team_id: str,
         attachments: List[Dict] = None,
         task_mode: TaskMode = TaskMode.Default,
+        extra: Optional[Dict[str, Any]] = None,
         options: TaskExecutionOptions = None,
     ) -> None:
         """Run an interactive session with user input support."""
@@ -220,6 +293,14 @@ class TaskRunner:
         self._start_time = time.time()
         self._execution_logs = []
         self._raw_messages = []
+        self._pending_request_id = None
+        self._pending_input_type = InputType.TEXT
+        self._pending_request_at = 0.0
+        self._marketing_chunk_buffers = {
+            RICH_TYPE_MARKETING_TWEET_REPLY: [],
+            RICH_TYPE_MARKETING_TWEET_INTERACT: [],
+            RICH_TYPE_WRITER_TWITTER: {},
+        }
 
         def on_message(message):
             self._handle_message(message, result_container, completion_events, options)
@@ -242,9 +323,7 @@ class TaskRunner:
 
         # Connect and start task
         self.ws_client.connect(self.session_info.session_id)
-        time.sleep(2)
-
-        if not self.ws_client.connected:
+        if not self._wait_until_connected():
             print("✗ Failed to connect!")
             return
 
@@ -269,13 +348,14 @@ class TaskRunner:
                 logger.warning(f"Failed to open local browser for Marketing mode: {e}")
 
         # Start the task
-        self._start_task(initial_task, team_id, attachments or [], task_mode)
+        self._start_task(initial_task, attachments or [], task_mode, extra)
         print(f"→ Started task: {initial_task}")
 
         # Interactive loop
         current_round = 1
         try:
             while True:
+                self._check_user_input_timeout(options, result_container, completion_events)
                 # Check for completion
                 if completion_events["task_completed"].wait(timeout=0.1):
                     print("✓ Task completed successfully!")
@@ -312,9 +392,23 @@ class TaskRunner:
                         continue
 
                     if user_input:
-                        user_message = {"type": MessageType.TEXT, "content": user_input}
-                        self.ws_client.send_message(user_message)
-                        print(f"→ Sent: {user_input}")
+                        if self._pending_request_id:
+                            if self._pending_input_type == InputType.PLAN:
+                                resp = WebSocketClient.create_plan_acceptance_response(
+                                    self._pending_request_id
+                                )
+                            else:
+                                resp = WebSocketClient.create_text_input_response(
+                                    self._pending_request_id, user_input
+                                )
+                            self.ws_client.send_message(resp)
+                            self._pending_request_id = None
+                            self._pending_input_type = InputType.TEXT
+                            self._pending_request_at = 0.0
+                        else:
+                            print("→ No pending input request, ignored")
+                            continue
+                        print("→ Sent input response")
 
                 except KeyboardInterrupt:
                     print("\nUser interrupted session")
@@ -335,19 +429,20 @@ class TaskRunner:
             print("Session completed.")
 
     def _start_task(
-        self, task: str, team_id: str, attachments: List[Dict], task_mode: TaskMode
+        self,
+        task: str,
+        attachments: List[Dict],
+        task_mode: TaskMode,
+        extra: Optional[Dict[str, Any]] = None,
     ):
         """Start the task execution."""
-        start_message = {
-            "type": MessageType.START,
-            "data": {
-                "messages": [{"type": "task", "content": task}],
-                "attachments": attachments,
-                "team_id": team_id,
-                "kb_ids": [],
-                "mode": task_mode.value if task_mode else "",
-            },
+        data = {
+            "messages": [{"type": "task", "content": task}],
+            "attachments": attachments,
         }
+        if extra:
+            data["extra"] = extra
+        start_message = {"type": MessageType.START, "data": data}
         self.ws_client.send_message(start_message)
 
     def _handle_message(
@@ -364,7 +459,7 @@ class TaskRunner:
 
             if msg_type == MessageType.TEXT:
                 self._handle_text_message(
-                    message, result_container, completion_events, options, timestamp
+                    message, result_container, options, timestamp
                 )
             elif msg_type == MessageType.PLAN:
                 self._handle_plan_message(message, options, timestamp)
@@ -375,6 +470,16 @@ class TaskRunner:
             elif msg_type == MessageType.TASK_RESULT:
                 self._handle_task_result(
                     message, result_container, completion_events, options, timestamp
+                )
+            elif msg_type == MessageType.PROGRESS:
+                content = message.get("content", "")
+                if options.enable_event_logging:
+                    self._log_event("progress", content, timestamp)
+            elif msg_type == MessageType.WARNING:
+                pass  # protocol says ignore
+            elif msg_type == MessageType.ERROR:
+                self._handle_error_message(
+                    message, result_container, completion_events, timestamp
                 )
             elif msg_type not in [MessageType.PING, MessageType.PONG]:
                 if options.enable_event_logging:
@@ -398,7 +503,6 @@ class TaskRunner:
         self,
         message: Dict,
         result_container: Dict,
-        completion_events: Dict,
         options: TaskExecutionOptions,
         timestamp: str,
     ):
@@ -408,20 +512,6 @@ class TaskRunner:
 
         if options.enable_event_logging:
             self._log_event(source, content, timestamp)
-
-        # Check for final answer
-        message_metadata = message.get("message", {}).get("metadata", {})
-        if message_metadata.get("type") == "final_answer":
-            result_container["final_answer"] = content
-            result_container["task_completed"] = True
-            logger.info(f"Final answer received: {content}")
-            # Send stop command immediately when final answer is received
-            try:
-                self.ws_client.send_stop()
-                logger.info("Stop command sent after final answer")
-            except Exception as e:
-                logger.warning(f"Failed to send stop command: {e}")
-            completion_events["task_completed"].set()
 
     def _handle_plan_message(
         self, message: Dict, options: TaskExecutionOptions, timestamp: str
@@ -454,55 +544,82 @@ class TaskRunner:
     def _handle_input_message(
         self, message: Dict, options: TaskExecutionOptions, timestamp: str
     ):
-        """Handle input requests including plan confirmations."""
-        message_data = message.get("message", {}).get("data", {})
+        """Handle input requests with protocol priority:
+        1. message.type == "x_confirm" -> plan acceptance (accepted=true)
+        2. last message was plan -> plan acceptance
+        3. source == "marketing_analyst" -> store pending_request_id for user input
+        4. other -> store pending_request_id for user input
+        """
+        msg_inner = message.get("message", {})
+        if isinstance(msg_inner, str):
+            msg_inner = {}
+        message_data = msg_inner.get("data", {})
+        if isinstance(message_data, str):
+            message_data = {}
         request_id = message_data.get("request_id")
-        message_type = message.get("message", {}).get("type", "")
-        is_text_input = message_type == "text"
+        inner_type = msg_inner.get("type", "")
 
-        # Check for plan request
-        recent_plan_message = None
+        if not request_id:
+            return
+
+        # Priority 1: x_confirm -> auto-accept
+        if inner_type == "x_confirm":
+            try:
+                resp = WebSocketClient.create_x_confirm_response(request_id)
+                self.ws_client.send_message(resp)
+                self._pending_request_id = None
+                self._pending_input_type = InputType.TEXT
+                self._pending_request_at = 0.0
+                logger.info(f"Auto-confirmed x_confirm {request_id}")
+                if options.enable_event_logging:
+                    self._log_event("system", f"Auto-confirmed x_confirm {request_id}", timestamp)
+            except Exception as e:
+                logger.error(f"Failed to confirm x_confirm {request_id}: {e}")
+            return
+
+        # Priority 2: last message was plan -> auto-accept plan
+        last_msg_type = None
+        last_plan_sub_type = None
         for msg in reversed(self._raw_messages):
-            if msg.get("type") == "plan":
-                recent_plan_message = msg
+            if msg.get("type") == MessageType.PLAN:
+                last_msg_type = MessageType.PLAN
+                last_plan_sub_type = msg.get("message", {}).get("type", "")
+                break
+            if msg.get("type") not in [MessageType.PING, MessageType.PONG, MessageType.WARNING]:
                 break
 
-        is_plan_request = False
-        if recent_plan_message:
-            plan_msg_type = recent_plan_message.get("message", {}).get("type", "")
-            is_plan_request = plan_msg_type in ["create_plan", "update_plan"]
-
-        if (
-            request_id
-            and is_plan_request
-            and is_text_input
-            and options.auto_accept_plan
-        ):
+        if last_msg_type == MessageType.PLAN and last_plan_sub_type in [
+            PlanType.CREATE_PLAN, PlanType.UPDATE_PLAN
+        ] and options.auto_accept_plan:
             try:
-                acceptance = {
-                    "type": "input",
-                    "data": {
-                        "input_type": "plan",
-                        "request_id": request_id,
-                        "response": {
-                            "accepted": True,
-                            "plan": [],
-                            "content": "",
-                        },
-                    },
-                }
-                self.ws_client.send_message(acceptance)
+                resp = WebSocketClient.create_plan_acceptance_response(request_id)
+                self.ws_client.send_message(resp)
+                self._pending_request_id = None
+                self._pending_input_type = InputType.TEXT
+                self._pending_request_at = 0.0
                 logger.info(f"Auto-accepted plan request {request_id}")
-
                 if options.enable_event_logging:
-                    self._log_event(
-                        "system",
-                        f"Auto-accepted plan request {request_id}",
-                        timestamp,
-                        {"request_id": request_id},
-                    )
+                    self._log_event("system", f"Auto-accepted plan {request_id}", timestamp)
             except Exception as e:
                 logger.error(f"Failed to accept plan {request_id}: {e}")
+            return
+
+        # Priority 3 & 4: store pending_request_id for user/marketing_analyst input
+        self._pending_request_id = request_id
+        if last_msg_type == MessageType.PLAN and last_plan_sub_type in [
+            PlanType.CREATE_PLAN, PlanType.UPDATE_PLAN
+        ]:
+            self._pending_input_type = InputType.PLAN
+        else:
+            self._pending_input_type = InputType.TEXT
+        self._pending_request_at = time.time()
+        source = message.get("source", "")
+        if options.enable_event_logging:
+            self._log_event(
+                "input",
+                f"Awaiting user input (source={source}, request_id={request_id}, input_type={self._pending_input_type})",
+                timestamp,
+            )
 
     def _handle_rich_message(
         self,
@@ -511,17 +628,38 @@ class TaskRunner:
         options: TaskExecutionOptions,
         timestamp: str,
     ):
-        """Handle rich media messages including browser screenshots."""
+        """Handle rich media messages."""
         message_data = message.get("message", {})
-        message_type = message_data.get("type", "").lower()
+        if isinstance(message_data, str):
+            message_data = {}
+        message_type = (message_data.get("type") or "").lower()
+
+        if message_type == RICH_TYPE_FOLLOW_UP_SUGGESTION:
+            result_container["follow_up_received"] = True
+            if options.enable_event_logging:
+                self._log_event("follow_up", "Follow-up suggestions received", timestamp)
+            return
+
+        if message_type in {
+            RICH_TYPE_MARKETING_TWEET_REPLY,
+            RICH_TYPE_MARKETING_TWEET_INTERACT,
+            RICH_TYPE_WRITER_TWITTER,
+        }:
+            self._handle_marketing_rich_message(
+                rich_type=message_type,
+                message_data=message_data,
+                message=message,
+                options=options,
+                timestamp=timestamp,
+            )
+            return
 
         if message_type == "browser":
             self._handle_browser_message(message, result_container, options, timestamp)
         else:
-            # Handle other rich content
             rich_content = message.get("content", {})
             if options.capture_screenshots and (
-                "screenshot" in rich_content or "browser" in str(rich_content).lower()
+                "screenshot" in str(rich_content) or "browser" in str(rich_content).lower()
             ):
                 result_container["screenshots"].append(
                     {"timestamp": timestamp, "data": rich_content}
@@ -530,8 +668,89 @@ class TaskRunner:
         # Show browser info
         source = (message.get("source") or message.get("source_type") or "").lower()
         inner_type = (message.get("message", {}).get("type") or "").lower()
-        if source == "wyse_browser" or inner_type == "browser":
+        if options.enable_browser_logging and (
+            source == "wyse_browser" or inner_type == "browser"
+        ):
             self.client.browser.show_info(self.session_info.session_id, message)
+
+    def _handle_marketing_rich_message(
+        self,
+        rich_type: str,
+        message_data: Dict[str, Any],
+        message: Dict[str, Any],
+        options: TaskExecutionOptions,
+        timestamp: str,
+    ) -> None:
+        is_chunk = message.get("delta") is True and bool(message.get("chunk_id"))
+        data = message_data.get("data")
+
+        if is_chunk and data:
+            if rich_type == RICH_TYPE_WRITER_TWITTER:
+                draft_id = data.get("draft_id")
+                if draft_id:
+                    writer_map = self._marketing_chunk_buffers[RICH_TYPE_WRITER_TWITTER]
+                    current = writer_map.get(draft_id)
+                    if current:
+                        current["content"] = (
+                            f"{current.get('content', '')}{data.get('content', '')}"
+                        )
+                    else:
+                        writer_map[draft_id] = dict(data)
+            else:
+                self._marketing_chunk_buffers[rich_type].append(data)
+
+            if options.enable_event_logging:
+                self._log_event("marketing_chunk", f"{rich_type} chunk received", timestamp)
+            return
+
+        if not is_chunk:
+            self._fetch_marketing_full_data(rich_type, options, timestamp)
+            if rich_type == RICH_TYPE_WRITER_TWITTER:
+                self._marketing_chunk_buffers[RICH_TYPE_WRITER_TWITTER] = {}
+            else:
+                self._marketing_chunk_buffers[rich_type] = []
+
+    def _fetch_marketing_full_data(
+        self, rich_type: str, options: TaskExecutionOptions, timestamp: str
+    ) -> None:
+        try:
+            if rich_type == RICH_TYPE_MARKETING_TWEET_REPLY:
+                data = self.client.session.get_marketing_data(
+                    self.session_info.session_id, type="reply"
+                )
+                if options.enable_event_logging:
+                    self._log_event(
+                        "marketing_data", f"reply={len(data.get('reply', []))}", timestamp
+                    )
+            elif rich_type == RICH_TYPE_MARKETING_TWEET_INTERACT:
+                like_data = self.client.session.get_marketing_data(
+                    self.session_info.session_id, type="like"
+                )
+                retweet_data = self.client.session.get_marketing_data(
+                    self.session_info.session_id, type="retweet"
+                )
+                if options.enable_event_logging:
+                    self._log_event(
+                        "marketing_data",
+                        f"like={len(like_data.get('like', []))}, retweet={len(retweet_data.get('retweet', []))}",
+                        timestamp,
+                    )
+            elif rich_type == RICH_TYPE_WRITER_TWITTER:
+                data = self.client.session.get_marketing_data(
+                    self.session_info.session_id, type="tweet"
+                )
+                if options.enable_event_logging:
+                    self._log_event(
+                        "marketing_data", f"tweet={len(data.get('tweet', []))}", timestamp
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to fetch marketing data for {rich_type}: {e}")
+            if options.enable_event_logging:
+                self._log_event(
+                    "marketing_data",
+                    f"{rich_type} fetch failed: {e}",
+                    timestamp,
+                )
 
     def _handle_browser_message(
         self,
@@ -580,6 +799,25 @@ class TaskRunner:
                 },
             )
 
+    def _handle_error_message(
+        self,
+        message: Dict,
+        result_container: Dict,
+        completion_events: Dict,
+        timestamp: str,
+    ):
+        """Handle error messages (type='error')."""
+        code = message.get("code")
+        error = message.get("error", "Unknown error")
+        message_id = message.get("message_id", "")
+        source = message.get("source", "")
+
+        logger.error(f"Session error: code={code} {error}")
+        result_container["has_error"] = True
+        result_container["error"] = f"[{code}] {error}"
+        self._log_event("error", f"code={code} {error}", timestamp, {"message_id": message_id, "source": source})
+        completion_events["error"].set()
+
     def _handle_task_result(
         self,
         message: Dict,
@@ -590,16 +828,28 @@ class TaskRunner:
     ):
         """Handle final task result."""
         final_answer = message.get("content", "")
+        msg_data = message.get("message", {})
+        if isinstance(msg_data, dict):
+            status = msg_data.get("data", {}).get("status", "")
+        else:
+            status = ""
+
         result_container["final_answer"] = final_answer
         result_container["task_completed"] = True
-        logger.info(f"Task completed: {final_answer}")
+        result_container["task_completed_at"] = time.time()
+        # If stopped, mark as not successful
+        if status == "stopped":
+            result_container["stopped"] = True
+            logger.info("Task was stopped")
+        else:
+            logger.info(f"Task completed: {final_answer}")
 
         if options.enable_event_logging:
             self._log_event(
                 "task_result",
                 f"Final Answer: {final_answer}",
                 timestamp,
-                {"type": "final_result"},
+                {"type": "final_result", "status": status},
             )
 
         completion_events["task_completed"].set()

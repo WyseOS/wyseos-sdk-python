@@ -13,6 +13,7 @@ DEFAULT_TIMEOUT = 30  # seconds
 
 # HTTP Headers
 HEADER_API_KEY = "x-api-key"
+HEADER_AUTHORIZATION = "Authorization"
 HEADER_CONTENT_TYPE = "Content-Type"
 HEADER_USER_AGENT = "User-Agent"
 HEADER_ACCEPT = "Accept"
@@ -42,6 +43,13 @@ ENDPOINT_SESSION_LIST = "/session/lists"
 ENDPOINT_SESSION_MESSAGES = "/session/message/lists"
 ENDPOINT_SESSION_MESSAGES_BETWEEN = "/session/message/between"
 ENDPOINT_SESSION_WEBSOCKET = "/session/ws/{session_id}"
+
+# Marketing endpoints
+ENDPOINT_SESSION_MARKETING_DATA = "/session/marketing/data/{session_id}"
+ENDPOINT_MARKETING_PRODUCT_INFO = "/dashboard/product/candidates/{product_id}/info"
+ENDPOINT_MARKETING_REPORT_INFO = "/dashboard/report/info/{report_id}"
+ENDPOINT_MARKETING_REPORT_UPDATE = "/dashboard/report/update/{report_id}"
+ENDPOINT_MARKETING_RESEARCH_TWEETS = "/dashboard/product/query/results/{query_id}/lists"
 
 # Browser endpoints
 ENDPOINT_BROWSER_INFO = "/browser/info/{browser_id}"
@@ -82,11 +90,29 @@ AGENT_TYPE_SUMMARY = "summary"
 
 # Session status
 SESSION_STATUS_CREATED = "created"
-SESSION_STATUS_RUNNING = "running"
+SESSION_STATUS_ACTIVE = "active"
+SESSION_STATUS_COMPLETE = "complete"
 SESSION_STATUS_PAUSED = "paused"
 SESSION_STATUS_STOPPED = "stopped"
-SESSION_STATUS_ENDED = "ended"
 SESSION_STATUS_ERROR = "error"
+
+# Platform
+PLATFORM_EXTENSION = "extension"
+PLATFORM_API = "api"
+PLATFORM_WEB = "web"
+
+# Mode
+MODE_MARKETING = "marketing"
+
+# Rich message sub-types
+RICH_TYPE_MARKETING_TWEET_REPLY = "marketing_tweet_reply"
+RICH_TYPE_MARKETING_TWEET_INTERACT = "marketing_tweet_interact"
+RICH_TYPE_WRITER_TWITTER = "writer_twitter"
+RICH_TYPE_MARKETING_REPORT = "marketing_report"
+RICH_TYPE_MARKETING_RESEARCH_TWEETS = "marketing_research_tweets"
+RICH_TYPE_FOLLOW_UP_SUGGESTION = "follow_up_suggestion"
+RICH_TYPE_X_BROWSER_ACTION = "x_browser_action"
+RICH_TYPE_SKILL = "skill"
 
 # Browser status
 BROWSER_STATUS_CREATED = "created"
