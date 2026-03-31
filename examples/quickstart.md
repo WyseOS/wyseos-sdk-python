@@ -53,7 +53,7 @@ session_info = client.session.get_info(session.session_id)
 print("session_id:", session.session_id)
 ```
 
-## 4. Run Automated Task
+## 4. Run Interactive Session (Marketing)
 
 ```python
 from wyseos.mate import create_task_runner
@@ -69,23 +69,19 @@ ws_client = WebSocketClient(
 
 task_runner = create_task_runner(ws_client, client, session_info)
 
-result = task_runner.run_task(
-    task="Generate 3 tweet drafts and recommended replies",
+task_runner.run_interactive_session(
+    initial_task="Generate 3 tweet drafts and recommended replies",
     attachments=[],
     task_mode=TaskMode.Marketing,
     extra=req.extra,
     options=TaskExecutionOptions(
-        auto_accept_plan=True,
+        auto_accept_plan=False,
         capture_screenshots=False,
-        enable_event_logging=True,
-        completion_timeout=300,
+        verbose=True,
+        stop_on_x_confirm=True,
+        completion_timeout=600,
     ),
 )
-
-if result.success:
-    print("final_answer:", result.final_answer)
-else:
-    print("error:", result.error)
 ```
 
 ## 5. Read Marketing Output
@@ -104,29 +100,13 @@ print(len(reply_data.get("reply", [])), "replies")
 print(len(tweet_data.get("tweet", [])), "draft tweets")
 ```
 
-## 6. Interactive Session
-
-```python
-task_runner.run_interactive_session(
-    initial_task="Help me improve the campaign strategy",
-    attachments=[],
-    task_mode=TaskMode.Marketing,
-    extra=req.extra,
-    options=TaskExecutionOptions(
-        auto_accept_plan=False,
-        capture_screenshots=True,
-        completion_timeout=600,
-    ),
-)
-```
-
 Interactive commands:
 
 - `stop` -> send stop message
 - `pause` -> send pause message
 - `exit` / `quit` / `q` -> leave session
 
-## 7. Upload Files
+## 6. Upload Files
 
 ```python
 is_valid, msg = client.file_upload.validate_file("brief.pdf")
@@ -135,9 +115,9 @@ if is_valid:
     attachments = [{"file_name": "brief.pdf", "file_url": upload["file_url"]}]
 ```
 
-Then pass `attachments` into `run_task(...)` or `run_interactive_session(...)`.
+Then pass `attachments` into `run_interactive_session(...)`.
 
-## 8. Error Handling
+## 7. Error Handling
 
 ```python
 from wyseos.mate.errors import APIError, NetworkError, ConfigError, WebSocketError
@@ -155,7 +135,7 @@ except ConfigError as e:
     print("ConfigError:", e)
 ```
 
-## 9. Related APIs
+## 8. Related APIs
 
 - `client.session.get_marketing_data(...)`
 - `client.marketing.get_product_info(product_id)`

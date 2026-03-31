@@ -3,12 +3,10 @@ Task runner: high-level task execution interface.
 """
 
 import datetime
+import json
 import logging
-import platform
-import subprocess
 import threading
 import time
-import webbrowser
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +14,8 @@ from pydantic import BaseModel
 
 from .constants import (
     RICH_TYPE_FOLLOW_UP_SUGGESTION,
+    RICH_TYPE_MARKETING_REPORT,
+    RICH_TYPE_MARKETING_RESEARCH_TWEETS,
     RICH_TYPE_MARKETING_TWEET_INTERACT,
     RICH_TYPE_MARKETING_TWEET_REPLY,
     RICH_TYPE_WRITER_TWITTER,
@@ -28,27 +28,30 @@ logger = logging.getLogger(__name__)
 FOLLOW_UP_GRACE_SECONDS = 1.5
 CONNECT_WAIT_TIMEOUT_SECONDS = 10.0
 CONNECT_POLL_INTERVAL_SECONDS = 0.05
+INTERACTIVE_IDLE_DEBUG_INTERVAL_SECONDS = 10.0
 
 
 class TaskExecutionOptions(BaseModel):
     """Configuration options for task execution."""
 
+    # SDK default is quiet; examples can explicitly turn it on.
+    verbose: bool = False
     auto_accept_plan: bool = True
     capture_screenshots: bool = (
         False  # Default off to avoid unnecessary resource consumption
     )
     enable_browser_logging: bool = True
-    enable_event_logging: bool = True  # Control detailed execution event logging
+    # Backward-compatible alias for old option name.
+    enable_event_logging: Optional[bool] = None
     completion_timeout: int = 300  # 5 minutes
     max_user_input_timeout: int = 0  # User input timeout, 0 means infinite wait
+    stop_on_x_confirm: bool = False  # For CLI safe mode: stop instead of confirming action
 
-    # Browser configuration options
-    use_existing_browser: bool = (
-        True  # Try to use existing browser instance to preserve cookies
-    )
-    preferred_browser: Optional[str] = (
-        None  # "chrome", "safari", "firefox", or None for auto-detect
-    )
+    @property
+    def event_logging_enabled(self) -> bool:
+        if self.enable_event_logging is not None:
+            return self.enable_event_logging
+        return self.verbose
 
 
 class TaskResult(BaseModel):
@@ -166,9 +169,10 @@ class TaskRunner:
             self._handle_message(message, result_container, completion_events, options)
 
         def on_error(error):
-            logger.error(f"WebSocket error: {error}")
+            err_msg = f"{type(error).__name__}: {error!r}"
+            logger.error(f"WebSocket error: {err_msg}")
             result_container["has_error"] = True
-            result_container["error"] = str(error)
+            result_container["error"] = err_msg
             completion_events["error"].set()
 
         def on_close():
@@ -189,21 +193,6 @@ class TaskRunner:
                 error="Failed to establish WebSocket connection",
                 session_duration=time.time() - self._start_time,
             )
-
-        # Open local browser for Marketing mode
-        if task_mode == TaskMode.Marketing:
-            url = "http://localhost:3000"
-            try:
-                if self._open_browser_smart(url, options):
-                    logger.info(f"Opened local browser to {url} for Marketing mode")
-                else:
-                    # Fallback to standard webbrowser.open()
-                    webbrowser.open(url)
-                    logger.info(
-                        f"Opened browser to {url} for Marketing mode (fallback method)"
-                    )
-            except Exception as e:
-                logger.warning(f"Failed to open local browser for Marketing mode: {e}")
 
         # Start the task
         self._start_task(task, attachments or [], task_mode, extra)
@@ -256,7 +245,7 @@ class TaskRunner:
             if options.capture_screenshots
             else [],
             execution_logs=[log.model_dump() for log in self._execution_logs]
-            if options.enable_event_logging
+            if options.event_logging_enabled
             else [],
             plan_history=self._extract_plan_history(),
             session_duration=time.time() - self._start_time,
@@ -306,9 +295,10 @@ class TaskRunner:
             self._handle_message(message, result_container, completion_events, options)
 
         def on_error(error):
-            logger.error(f"WebSocket error: {error}")
+            err_msg = f"{type(error).__name__}: {error!r}"
+            logger.error(f"WebSocket error: {err_msg}")
             result_container["has_error"] = True
-            result_container["error"] = str(error)
+            result_container["error"] = err_msg
             completion_events["error"].set()
 
         def on_close():
@@ -324,35 +314,19 @@ class TaskRunner:
         # Connect and start task
         self.ws_client.connect(self.session_info.session_id)
         if not self._wait_until_connected():
-            print("✗ Failed to connect!")
+            detail = result_container.get("error")
+            if detail:
+                print(f"✗ Failed to connect: {detail}")
+            else:
+                print("✗ Failed to connect!")
             return
-
-        # Open local browser for Marketing mode
-        if task_mode == TaskMode.Marketing:
-            url = "http://localhost:3000"
-            try:
-                if self._open_browser_smart(url, options):
-                    print(f"🌐 Opened local browser to {url} for Marketing mode")
-                    logger.info(f"Opened local browser to {url} for Marketing mode")
-                else:
-                    # Fallback to standard webbrowser.open()
-                    webbrowser.open(url)
-                    print(
-                        f"🌐 Opened browser to {url} for Marketing mode (fallback method)"
-                    )
-                    logger.info(
-                        f"Opened browser to {url} for Marketing mode (fallback method)"
-                    )
-            except Exception as e:
-                print(f"⚠️  Failed to open local browser: {e}")
-                logger.warning(f"Failed to open local browser for Marketing mode: {e}")
 
         # Start the task
         self._start_task(initial_task, attachments or [], task_mode, extra)
         print(f"→ Started task: {initial_task}")
 
-        # Interactive loop
-        current_round = 1
+        # Interactive loop: only prompt when server requests user input.
+        last_idle_debug_at = 0.0
         try:
             while True:
                 self._check_user_input_timeout(options, result_container, completion_events)
@@ -370,10 +344,36 @@ class TaskRunner:
                         print("✗ WebSocket connection closed before task completion")
                     break
 
-                # Handle user input
+                if not self._pending_request_id:
+                    if options.verbose:
+                        now = time.time()
+                        if (
+                            now - last_idle_debug_at
+                            >= INTERACTIVE_IDLE_DEBUG_INTERVAL_SECONDS
+                        ):
+                            logger.debug(
+                                "waiting for server events "
+                                "(pending_request_id=None, task_completed=%s, connection_closed=%s)",
+                                completion_events["task_completed"].is_set(),
+                                completion_events["connection_closed"].is_set(),
+                            )
+                            last_idle_debug_at = now
+                    time.sleep(0.05)
+                    continue
+
+                # Handle user input only when pending request exists
                 try:
-                    user_input = input(f"[{current_round}] > ").strip()
-                    current_round += 1
+                    logger.debug(
+                        "prompting user input (request_id=%s, input_type=%s)",
+                        self._pending_request_id,
+                        self._pending_input_type,
+                    )
+                    prompt = (
+                        "[plan] > "
+                        if self._pending_input_type == InputType.PLAN
+                        else "[input] > "
+                    )
+                    user_input = input(prompt).strip()
 
                     if user_input.lower() in ["exit", "quit", "q"]:
                         completion_events["user_exit"].set()
@@ -391,24 +391,23 @@ class TaskRunner:
                         time.sleep(3)
                         continue
 
-                    if user_input:
-                        if self._pending_request_id:
-                            if self._pending_input_type == InputType.PLAN:
-                                resp = WebSocketClient.create_plan_acceptance_response(
-                                    self._pending_request_id
-                                )
-                            else:
-                                resp = WebSocketClient.create_text_input_response(
-                                    self._pending_request_id, user_input
-                                )
-                            self.ws_client.send_message(resp)
-                            self._pending_request_id = None
-                            self._pending_input_type = InputType.TEXT
-                            self._pending_request_at = 0.0
-                        else:
-                            print("→ No pending input request, ignored")
-                            continue
-                        print("→ Sent input response")
+                    if not user_input:
+                        print("→ Empty input ignored")
+                        continue
+
+                    if self._pending_input_type == InputType.PLAN:
+                        resp = WebSocketClient.create_plan_acceptance_response(
+                            self._pending_request_id
+                        )
+                    else:
+                        resp = WebSocketClient.create_text_input_response(
+                            self._pending_request_id, user_input
+                        )
+                    self.ws_client.send_message(resp)
+                    self._pending_request_id = None
+                    self._pending_input_type = InputType.TEXT
+                    self._pending_request_at = 0.0
+                    print("→ Sent input response")
 
                 except KeyboardInterrupt:
                     print("\nUser interrupted session")
@@ -416,7 +415,9 @@ class TaskRunner:
                     break
 
         finally:
+            logger.debug("interactive loop exited, starting websocket disconnect")
             self.ws_client.disconnect()
+            logger.debug("websocket disconnect finished")
 
             if result_container["final_answer"]:
                 print(f"📝 Final Answer: {result_container['final_answer']}")
@@ -456,6 +457,13 @@ class TaskRunner:
         try:
             msg_type = WebSocketClient.get_message_type(message)
             timestamp = datetime.datetime.now().isoformat()
+            if msg_type not in [MessageType.PING, MessageType.PONG]:
+                logger.debug(
+                    "received message type=%s source=%s message_id=%s",
+                    msg_type,
+                    message.get("source", ""),
+                    message.get("message_id", ""),
+                )
 
             if msg_type == MessageType.TEXT:
                 self._handle_text_message(
@@ -473,16 +481,18 @@ class TaskRunner:
                 )
             elif msg_type == MessageType.PROGRESS:
                 content = message.get("content", "")
-                if options.enable_event_logging:
+                if options.verbose:
+                    print(f"[progress] {content}")
+                if options.event_logging_enabled:
                     self._log_event("progress", content, timestamp)
             elif msg_type == MessageType.WARNING:
                 pass  # protocol says ignore
             elif msg_type == MessageType.ERROR:
                 self._handle_error_message(
-                    message, result_container, completion_events, timestamp
+                    message, result_container, completion_events, options, timestamp
                 )
             elif msg_type not in [MessageType.PING, MessageType.PONG]:
-                if options.enable_event_logging:
+                if options.event_logging_enabled:
                     logger.info(f"Unhandled message type: {msg_type}")
 
             # Track raw messages for plan acceptance logic
@@ -491,7 +501,7 @@ class TaskRunner:
 
         except Exception as e:
             logger.error(f"Error handling WebSocket message: {e}")
-            if options.enable_event_logging:
+            if options.event_logging_enabled:
                 self._log_event(
                     "error",
                     f"Message handling error: {str(e)}",
@@ -510,30 +520,79 @@ class TaskRunner:
         content = message.get("content", "")
         source = message.get("source", "unknown")
 
-        if options.enable_event_logging:
+        if options.verbose:
+            display = self._format_text_for_display(content)
+            if display:
+                print(f"[text] {display}")
+
+        if options.event_logging_enabled:
             self._log_event(source, content, timestamp)
+
+    @staticmethod
+    def _format_text_for_display(content: str) -> Optional[str]:
+        """Format text content for CLI display. Parse JSON completion messages to show reason."""
+        stripped = content.strip()
+        # Handle ```json ... ``` wrapped content
+        if stripped.startswith("```json") and stripped.endswith("```"):
+            stripped = stripped[7:-3].strip()
+        if stripped.startswith("{"):
+            try:
+                obj = json.loads(stripped)
+                reason = (obj.get("is_current_step_complete") or {}).get("reason")
+                if reason:
+                    return reason
+            except _json.JSONDecodeError:
+                pass
+        return content[:200] if content else None
 
     def _handle_plan_message(
         self, message: Dict, options: TaskExecutionOptions, timestamp: str
     ):
         """Handle plan messages with automatic acceptance support."""
         try:
+            msg_inner = message.get("message", {})
+            if isinstance(msg_inner, str):
+                msg_inner = {}
+            sub_type = msg_inner.get("type", "")
+            plan_data = msg_inner.get("data", {})
+            if options.verbose:
+                if sub_type == PlanType.CREATE_PLAN:
+                    steps = plan_data if isinstance(plan_data, list) else []
+                    print(f"[plan] create plan, {len(steps)} steps")
+                    for step in steps:
+                        title = (
+                            step.get("title", "")
+                            if isinstance(step, dict)
+                            else str(step)
+                        )
+                        if title:
+                            print(f"  - {title}")
+                elif sub_type == PlanType.UPDATE_TASK_STATUS and isinstance(plan_data, dict):
+                    step_id = plan_data.get("id", "")
+                    title = plan_data.get("title", "")
+                    status = plan_data.get("status", "")
+                    print(f'[plan] step {step_id} "{title}" -> {status}')
+                elif sub_type == PlanType.UPDATE_PLAN:
+                    print("[plan] plan updated")
+
             if self._plan_state is None:
                 self._plan_state = Plan()
 
             changed = self._plan_state.apply_message(message)
-            if changed and options.enable_event_logging:
+            if changed:
                 status = self._plan_state.get_overall_status().value
-                self._log_event(
-                    "plan_manager",
-                    f"Plan status: {status}",
-                    timestamp,
-                    {"plan_data": str(message)},
-                )
-                logger.info(f"Plan updated: {status}")
+                if options.verbose:
+                    print(f"[plan] status: {status}")
+                if options.event_logging_enabled:
+                    self._log_event(
+                        "plan_manager",
+                        f"Plan status: {status}",
+                        timestamp,
+                        {"plan_data": str(message)},
+                    )
         except Exception as e:
             logger.error(f"Failed to process plan: {e}")
-            if options.enable_event_logging:
+            if options.event_logging_enabled:
                 self._log_event(
                     "error",
                     f"Plan processing error: {str(e)}",
@@ -560,18 +619,49 @@ class TaskRunner:
         inner_type = msg_inner.get("type", "")
 
         if not request_id:
+            logger.debug(
+                "ignored input message without request_id (inner_type=%s)",
+                inner_type,
+            )
             return
+        if options.verbose:
+            print(
+                f"[input] request_id={request_id}, message.type={inner_type or 'unknown'}"
+            )
 
         # Priority 1: x_confirm -> auto-accept
         if inner_type == "x_confirm":
+            if options.stop_on_x_confirm:
+                try:
+                    self.ws_client.send_stop()
+                    self._pending_request_id = None
+                    self._pending_input_type = InputType.TEXT
+                    self._pending_request_at = 0.0
+                    if options.verbose:
+                        print("→ x_confirm received, sent stop instead of confirm")
+                    logger.info(
+                        "x_confirm received, stop command sent (request_id=%s)",
+                        request_id,
+                    )
+                    if options.event_logging_enabled:
+                        self._log_event(
+                            "system",
+                            f"x_confirm stop sent {request_id}",
+                            timestamp,
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to send stop on x_confirm {request_id}: {e}")
+                return
             try:
                 resp = WebSocketClient.create_x_confirm_response(request_id)
                 self.ws_client.send_message(resp)
                 self._pending_request_id = None
                 self._pending_input_type = InputType.TEXT
                 self._pending_request_at = 0.0
+                if options.verbose:
+                    print("→ Auto-confirmed x_confirm")
                 logger.info(f"Auto-confirmed x_confirm {request_id}")
-                if options.enable_event_logging:
+                if options.event_logging_enabled:
                     self._log_event("system", f"Auto-confirmed x_confirm {request_id}", timestamp)
             except Exception as e:
                 logger.error(f"Failed to confirm x_confirm {request_id}: {e}")
@@ -597,8 +687,10 @@ class TaskRunner:
                 self._pending_request_id = None
                 self._pending_input_type = InputType.TEXT
                 self._pending_request_at = 0.0
+                if options.verbose:
+                    print("→ Auto-accepted plan")
                 logger.info(f"Auto-accepted plan request {request_id}")
-                if options.enable_event_logging:
+                if options.event_logging_enabled:
                     self._log_event("system", f"Auto-accepted plan {request_id}", timestamp)
             except Exception as e:
                 logger.error(f"Failed to accept plan {request_id}: {e}")
@@ -614,7 +706,9 @@ class TaskRunner:
             self._pending_input_type = InputType.TEXT
         self._pending_request_at = time.time()
         source = message.get("source", "")
-        if options.enable_event_logging:
+        if options.verbose:
+            print(f"[input] waiting for user response (source={source})")
+        if options.event_logging_enabled:
             self._log_event(
                 "input",
                 f"Awaiting user input (source={source}, request_id={request_id}, input_type={self._pending_input_type})",
@@ -636,7 +730,7 @@ class TaskRunner:
 
         if message_type == RICH_TYPE_FOLLOW_UP_SUGGESTION:
             result_container["follow_up_received"] = True
-            if options.enable_event_logging:
+            if options.event_logging_enabled:
                 self._log_event("follow_up", "Follow-up suggestions received", timestamp)
             return
 
@@ -652,6 +746,12 @@ class TaskRunner:
                 options=options,
                 timestamp=timestamp,
             )
+            return
+        if message_type == RICH_TYPE_MARKETING_REPORT:
+            self._handle_marketing_report(message_data, options, timestamp)
+            return
+        if message_type == RICH_TYPE_MARKETING_RESEARCH_TWEETS:
+            self._handle_marketing_research_tweets(message_data, options, timestamp)
             return
 
         if message_type == "browser":
@@ -696,15 +796,33 @@ class TaskRunner:
                         )
                     else:
                         writer_map[draft_id] = dict(data)
+                    if options.verbose:
+                        chunk_len = len(data.get("content", "") or "")
+                        print(f"  [chunk] {rich_type} {draft_id}: +{chunk_len} chars")
             else:
                 self._marketing_chunk_buffers[rich_type].append(data)
+                if options.verbose:
+                    chunk_count = len(self._marketing_chunk_buffers[rich_type])
+                    print(f"  [chunk] {rich_type}: {chunk_count} items")
 
-            if options.enable_event_logging:
+            if options.event_logging_enabled:
                 self._log_event("marketing_chunk", f"{rich_type} chunk received", timestamp)
             return
 
         if not is_chunk:
-            self._fetch_marketing_full_data(rich_type, options, timestamp)
+            if options.verbose:
+                print(f"  [stream end] {rich_type}")
+            summary = self._fetch_marketing_full_data(rich_type, options, timestamp)
+            if options.verbose:
+                if rich_type == RICH_TYPE_MARKETING_TWEET_REPLY:
+                    print(f"  [reply] full data: {summary.get('reply', 0)} items")
+                elif rich_type == RICH_TYPE_MARKETING_TWEET_INTERACT:
+                    print(
+                        "  [interact] "
+                        f"like={summary.get('like', 0)}, retweet={summary.get('retweet', 0)}"
+                    )
+                elif rich_type == RICH_TYPE_WRITER_TWITTER:
+                    print(f"  [tweet] full data: {summary.get('tweet', 0)} items")
             if rich_type == RICH_TYPE_WRITER_TWITTER:
                 self._marketing_chunk_buffers[RICH_TYPE_WRITER_TWITTER] = {}
             else:
@@ -712,15 +830,17 @@ class TaskRunner:
 
     def _fetch_marketing_full_data(
         self, rich_type: str, options: TaskExecutionOptions, timestamp: str
-    ) -> None:
+    ) -> Dict[str, int]:
+        summary: Dict[str, int] = {}
         try:
             if rich_type == RICH_TYPE_MARKETING_TWEET_REPLY:
                 data = self.client.session.get_marketing_data(
                     self.session_info.session_id, type="reply"
                 )
-                if options.enable_event_logging:
+                summary["reply"] = len(data.get("reply", []))
+                if options.event_logging_enabled:
                     self._log_event(
-                        "marketing_data", f"reply={len(data.get('reply', []))}", timestamp
+                        "marketing_data", f"reply={summary['reply']}", timestamp
                     )
             elif rich_type == RICH_TYPE_MARKETING_TWEET_INTERACT:
                 like_data = self.client.session.get_marketing_data(
@@ -729,26 +849,133 @@ class TaskRunner:
                 retweet_data = self.client.session.get_marketing_data(
                     self.session_info.session_id, type="retweet"
                 )
-                if options.enable_event_logging:
+                summary["like"] = len(like_data.get("like", []))
+                summary["retweet"] = len(retweet_data.get("retweet", []))
+                if options.event_logging_enabled:
                     self._log_event(
                         "marketing_data",
-                        f"like={len(like_data.get('like', []))}, retweet={len(retweet_data.get('retweet', []))}",
+                        f"like={summary['like']}, retweet={summary['retweet']}",
                         timestamp,
                     )
             elif rich_type == RICH_TYPE_WRITER_TWITTER:
                 data = self.client.session.get_marketing_data(
                     self.session_info.session_id, type="tweet"
                 )
-                if options.enable_event_logging:
+                summary["tweet"] = len(data.get("tweet", []))
+                if options.event_logging_enabled:
                     self._log_event(
-                        "marketing_data", f"tweet={len(data.get('tweet', []))}", timestamp
+                        "marketing_data", f"tweet={summary['tweet']}", timestamp
                     )
         except Exception as e:
             logger.warning(f"Failed to fetch marketing data for {rich_type}: {e}")
-            if options.enable_event_logging:
+            if options.event_logging_enabled:
                 self._log_event(
                     "marketing_data",
                     f"{rich_type} fetch failed: {e}",
+                    timestamp,
+                )
+        return summary
+
+    def _handle_marketing_report(
+        self,
+        message_data: Dict[str, Any],
+        options: TaskExecutionOptions,
+        timestamp: str,
+    ) -> None:
+        data = message_data.get("data", {})
+        if isinstance(data, str):
+            data = {}
+        product_id = data.get("product_id", "")
+        product_name = data.get("product_name", "")
+
+        if options.verbose:
+            print(f"  [report] product: {product_name} ({product_id})")
+        if not product_id:
+            return
+
+        try:
+            product = self.client.marketing.get_product_info(product_id)
+            status = product.get("status", "unknown")
+            if options.verbose:
+                print(f"  [report] product status: {status}")
+
+            analysis_result = product.get("analysis_result") or {}
+            report_id = analysis_result.get("report_id")
+            if status != "completed" or not report_id:
+                return
+
+            report = self.client.marketing.get_report_detail(report_id)
+            if options.verbose:
+                keywords = [str(item) for item in (report.get("keywords", []) or [])]
+                personas = [str(item) for item in (report.get("user_personas", []) or [])]
+                competitors = [str(item) for item in (report.get("competitors", []) or [])]
+                print(f"  [report] target: {report.get('target_description', '')}")
+                print(f"  [report] keywords: {', '.join(keywords)}")
+                print(f"  [report] personas: {', '.join(personas)}")
+                print(f"  [report] competitors: {', '.join(competitors)}")
+                campaigns = report.get("recommended_campaigns", []) or []
+                campaign_names = [
+                    item.get("name", "")
+                    for item in campaigns
+                    if isinstance(item, dict) and item.get("name")
+                ]
+                print(f"  [report] campaigns: {', '.join(campaign_names)}")
+
+            if options.event_logging_enabled:
+                self._log_event(
+                    "marketing_report",
+                    f"product_id={product_id}, status={status}",
+                    timestamp,
+                )
+        except Exception as e:
+            logger.warning(f"Failed to read marketing report for {product_id}: {e}")
+            if options.event_logging_enabled:
+                self._log_event(
+                    "marketing_report",
+                    f"fetch failed: {e}",
+                    timestamp,
+                )
+
+    def _handle_marketing_research_tweets(
+        self,
+        message_data: Dict[str, Any],
+        options: TaskExecutionOptions,
+        timestamp: str,
+    ) -> None:
+        data = message_data.get("data", {})
+        if isinstance(data, str):
+            data = {}
+        query_id = data.get("query_id", "")
+
+        if options.verbose:
+            print(f"  [research] query_id: {query_id}")
+        if not query_id:
+            return
+
+        try:
+            tweets = self.client.marketing.get_research_tweets(query_id) or []
+            if options.verbose:
+                print(f"  [research] matched tweets: {len(tweets)}")
+                for i, tweet in enumerate(tweets[:5], start=1):
+                    if not isinstance(tweet, dict):
+                        continue
+                    username = tweet.get("username", "")
+                    text = (tweet.get("tweet", "") or "")[:60]
+                    likes = tweet.get("favorite_count", 0)
+                    print(f'    {i}. @{username}: "{text}..." ({likes} likes)')
+
+            if options.event_logging_enabled:
+                self._log_event(
+                    "marketing_research",
+                    f"query_id={query_id}, total={len(tweets)}",
+                    timestamp,
+                )
+        except Exception as e:
+            logger.warning(f"Failed to read research tweets for {query_id}: {e}")
+            if options.event_logging_enabled:
+                self._log_event(
+                    "marketing_research",
+                    f"fetch failed: {e}",
                     timestamp,
                 )
 
@@ -775,7 +1002,7 @@ class TaskRunner:
                 }
             )
 
-        if options.enable_event_logging:
+        if options.event_logging_enabled:
             content_parts = []
             if action:
                 content_parts.append(f"Action: {action}")
@@ -804,6 +1031,7 @@ class TaskRunner:
         message: Dict,
         result_container: Dict,
         completion_events: Dict,
+        options: TaskExecutionOptions,
         timestamp: str,
     ):
         """Handle error messages (type='error')."""
@@ -813,6 +1041,8 @@ class TaskRunner:
         source = message.get("source", "")
 
         logger.error(f"Session error: code={code} {error}")
+        if options.verbose:
+            print(f"[error] code={code} {error}")
         result_container["has_error"] = True
         result_container["error"] = f"[{code}] {error}"
         self._log_event("error", f"code={code} {error}", timestamp, {"message_id": message_id, "source": source})
@@ -837,14 +1067,14 @@ class TaskRunner:
         result_container["final_answer"] = final_answer
         result_container["task_completed"] = True
         result_container["task_completed_at"] = time.time()
-        # If stopped, mark as not successful
         if status == "stopped":
             result_container["stopped"] = True
-            logger.info("Task was stopped")
-        else:
-            logger.info(f"Task completed: {final_answer}")
+        if options.verbose:
+            label = "stopped" if status == "stopped" else "completed"
+            print(f"[task_result] {label}")
+        logger.debug("task_result status=%s answer=%s", status or "completed", final_answer[:200])
 
-        if options.enable_event_logging:
+        if options.event_logging_enabled:
             self._log_event(
                 "task_result",
                 f"Final Answer: {final_answer}",
@@ -870,232 +1100,3 @@ class TaskRunner:
             if log.source == "plan_manager":
                 plan_history.append(log.model_dump())
         return plan_history
-
-    def _open_browser_smart(self, url: str, options: TaskExecutionOptions) -> bool:
-        """
-        Smart browser opening that tries to use existing browser instances to preserve cookies.
-
-        Args:
-            url: URL to open
-            options: Task execution options containing browser preferences
-
-        Returns:
-            bool: True if successfully opened, False otherwise
-        """
-        if not options.use_existing_browser:
-            # Fall back to standard webbrowser.open()
-            try:
-                webbrowser.open(url)
-                return True
-            except Exception:
-                return False
-
-        # Platform-specific smart opening
-        system = platform.system().lower()
-
-        if system == "darwin":  # macOS
-            return self._open_browser_macos(url, options.preferred_browser)
-        elif system == "windows":
-            return self._open_browser_windows(url, options.preferred_browser)
-        elif system == "linux":
-            return self._open_browser_linux(url, options.preferred_browser)
-
-        # Universal fallback
-        try:
-            webbrowser.open(url)
-            return True
-        except Exception:
-            return False
-
-    def _open_browser_macos(
-        self, url: str, preferred_browser: Optional[str] = None
-    ) -> bool:
-        """Open URL in existing browser instance on macOS using AppleScript."""
-        browsers_to_try = []
-
-        if preferred_browser:
-            browsers_to_try.append(preferred_browser.lower())
-
-        # Default browser order for macOS
-        browsers_to_try.extend(["chrome", "safari", "firefox", "edge"])
-
-        for browser in browsers_to_try:
-            if self._try_open_browser_macos(url, browser):
-                return True
-
-        return False
-
-    def _try_open_browser_macos(self, url: str, browser: str) -> bool:
-        """Try to open URL in a specific browser on macOS."""
-        try:
-            if browser == "chrome":
-                applescript = f'''
-                tell application "Google Chrome"
-                    if it is running then
-                        if (count of windows) > 0 then
-                            tell window 1 to make new tab with properties {{URL:"{url}"}}
-                        else
-                            make new window with properties {{URL:"{url}"}}
-                        end if
-                        activate
-                        return true
-                    end if
-                end tell
-                '''
-            elif browser == "safari":
-                applescript = f'''
-                tell application "Safari"
-                    if it is running then
-                        if (count of windows) > 0 then
-                            tell window 1 to make new tab with properties {{URL:"{url}"}}
-                        else
-                            make new document with properties {{URL:"{url}"}}
-                        end if
-                        activate
-                        return true
-                    end if
-                end tell
-                '''
-            elif browser == "firefox":
-                # Firefox doesn't support AppleScript as well, try command line
-                subprocess.run(
-                    ["open", "-a", "Firefox", "--args", "--new-tab", url],
-                    check=True,
-                    timeout=5,
-                    capture_output=True,
-                )
-                return True
-            elif browser == "edge":
-                applescript = f'''
-                tell application "Microsoft Edge"
-                    if it is running then
-                        if (count of windows) > 0 then
-                            tell window 1 to make new tab with properties {{URL:"{url}"}}
-                        else
-                            make new window with properties {{URL:"{url}"}}
-                        end if
-                        activate
-                        return true
-                    end if
-                end tell
-                '''
-            else:
-                return False
-
-            if browser in ["chrome", "safari", "edge"]:
-                result = subprocess.run(
-                    ["osascript", "-e", applescript],
-                    check=True,
-                    timeout=5,
-                    capture_output=True,
-                    text=True,
-                )
-
-                # Check if the script returned success
-                return "true" in result.stdout.lower() or result.returncode == 0
-
-        except Exception as e:
-            logger.debug(f"Failed to open {browser} on macOS: {e}")
-            return False
-
-        return False
-
-    def _open_browser_windows(
-        self, url: str, preferred_browser: Optional[str] = None
-    ) -> bool:
-        """Open URL in existing browser instance on Windows."""
-        browsers_to_try = []
-
-        if preferred_browser:
-            browsers_to_try.append(preferred_browser.lower())
-
-        browsers_to_try.extend(["chrome", "edge", "firefox"])
-
-        for browser in browsers_to_try:
-            if self._try_open_browser_windows(url, browser):
-                return True
-
-        return False
-
-    def _try_open_browser_windows(self, url: str, browser: str) -> bool:
-        """Try to open URL in a specific browser on Windows."""
-        try:
-            if browser == "chrome":
-                subprocess.run(
-                    ["start", "chrome", "--new-tab", url],
-                    shell=True,
-                    check=True,
-                    timeout=5,
-                )
-                return True
-            elif browser == "edge":
-                subprocess.run(
-                    ["start", "msedge", "--new-tab", url],
-                    shell=True,
-                    check=True,
-                    timeout=5,
-                )
-                return True
-            elif browser == "firefox":
-                subprocess.run(
-                    ["start", "firefox", "-new-tab", url],
-                    shell=True,
-                    check=True,
-                    timeout=5,
-                )
-                return True
-        except Exception as e:
-            logger.debug(f"Failed to open {browser} on Windows: {e}")
-            return False
-
-        return False
-
-    def _open_browser_linux(
-        self, url: str, preferred_browser: Optional[str] = None
-    ) -> bool:
-        """Open URL in existing browser instance on Linux."""
-        browsers_to_try = []
-
-        if preferred_browser:
-            browsers_to_try.append(preferred_browser.lower())
-
-        browsers_to_try.extend(["chrome", "firefox", "chromium"])
-
-        for browser in browsers_to_try:
-            if self._try_open_browser_linux(url, browser):
-                return True
-
-        return False
-
-    def _try_open_browser_linux(self, url: str, browser: str) -> bool:
-        """Try to open URL in a specific browser on Linux."""
-        try:
-            if browser == "chrome":
-                subprocess.run(
-                    ["google-chrome", "--new-tab", url],
-                    check=True,
-                    timeout=5,
-                    capture_output=True,
-                )
-                return True
-            elif browser == "firefox":
-                subprocess.run(
-                    ["firefox", "-new-tab", url],
-                    check=True,
-                    timeout=5,
-                    capture_output=True,
-                )
-                return True
-            elif browser == "chromium":
-                subprocess.run(
-                    ["chromium-browser", "--new-tab", url],
-                    check=True,
-                    timeout=5,
-                    capture_output=True,
-                )
-                return True
-        except Exception as e:
-            logger.debug(f"Failed to open {browser} on Linux: {e}")
-            return False
-
-        return False
