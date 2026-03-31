@@ -181,6 +181,9 @@ class WebSocketClient:
         self.thread.start()
 
     def disconnect(self) -> None:
+        started_at = time.time()
+        logger.debug("disconnect requested (session_id=%s)", self.session_id)
+
         if self._heartbeat_task and self.loop:
             try:
                 asyncio.run_coroutine_threadsafe(
@@ -199,6 +202,10 @@ class WebSocketClient:
 
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=DEFAULT_TIMEOUT)
+            if self.thread.is_alive():
+                logger.warning("websocket thread still alive after join timeout")
+
+        logger.debug("disconnect finished in %.2fs", time.time() - started_at)
 
     def send_message(self, message: Union[Dict[str, Any], UserTaskMessage]) -> None:
         if not self.is_connected or not self.websocket:
@@ -323,7 +330,11 @@ class WebSocketClient:
         try:
             self.loop.run_until_complete(self._connect_and_listen())
         except Exception as e:
-            logger.error(f"WebSocket connection error: {e}")
+            logger.exception(
+                "WebSocket connection error (%s): %r",
+                type(e).__name__,
+                e,
+            )
             if self.on_error:
                 self.on_error(e)
         finally:
@@ -336,8 +347,6 @@ class WebSocketClient:
             await self._listen_for_messages()
         except Exception as e:
             self.is_connected = False
-            if self.on_error:
-                self.on_error(e)
             raise
         finally:
             await self._stop_heartbeat()
@@ -357,7 +366,7 @@ class WebSocketClient:
         if self.on_connect:
             self.on_connect()
 
-        logger.info(f"WebSocket connected to {ws_url}")
+        logger.debug(f"WebSocket connected to {ws_url}")
 
     async def _send_ping(self) -> None:
         ping_message = {"type": MessageType.PING, "timestamp": int(time.time() * 1000)}

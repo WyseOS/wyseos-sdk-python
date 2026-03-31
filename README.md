@@ -50,18 +50,18 @@ ws_client = WebSocketClient(
 )
 task_runner = create_task_runner(ws_client, client, session_info)
 
-# 4) Execute task
-result = task_runner.run_task(
-    task="Generate 3 tweet drafts and 5 candidate replies",
+# 4) Execute interactive session (recommended for marketing input loops)
+task_runner.run_interactive_session(
+    initial_task="Generate 3 tweet drafts and 5 candidate replies",
     task_mode=TaskMode.Marketing,
     extra=req.extra,
-    options=TaskExecutionOptions(auto_accept_plan=True, completion_timeout=300),
+    options=TaskExecutionOptions(
+        auto_accept_plan=False,
+        verbose=True,
+        stop_on_x_confirm=True,
+        completion_timeout=600,
+    ),
 )
-
-if result.success:
-    print("final_answer:", result.final_answer)
-else:
-    print("error:", result.error)
 ```
 
 More examples: `examples/quickstart.md` and `examples/getting_started/example.py`.
@@ -110,11 +110,11 @@ Main methods:
 
 `TaskExecutionOptions` includes:
 
-- `auto_accept_plan`
+- `verbose` (default: `False`) — print status/progress to stdout
+- `auto_accept_plan` — auto-approve plan without user input
 - `capture_screenshots`
-- `enable_event_logging`
+- `stop_on_x_confirm` — stop session when browser confirmation is requested (useful in CLI)
 - `completion_timeout`
-- browser launch preferences for interactive mode
 
 ## Marketing APIs
 
