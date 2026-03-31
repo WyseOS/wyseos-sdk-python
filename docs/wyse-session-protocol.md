@@ -1,4 +1,5 @@
-# Wyse Session Protocol
+# 市场模式接口
+
 ---
 
 ## 典型交互时序
@@ -30,7 +31,6 @@
 - **JWT Token**：HTTP API 在请求头中携带 `Authorization: {jwt_token}`，WebSocket 在 URL query 中携带 `?authorization={jwt_token}`
 - **API Key**：HTTP API 在请求头中携带 `x-api-key: {api_key}`，WebSocket 在 URL query 中携带 `?api_key={api_key}`
 
-
 ## HTTP API
 
 ### 通用响应结构
@@ -45,11 +45,11 @@
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `code` | number | 状态码，`0` 表示成功，非 `0` 为错误 |
-| `msg` | string | 状态描述 |
-| `data` | T | 业务数据，**后文所有 API 的"响应"部分均指此字段的内容** |
+| 字段     | 类型   | 说明                                                          |
+| -------- | ------ | ------------------------------------------------------------- |
+| `code` | number | 状态码，`0` 表示成功，非 `0` 为错误                       |
+| `msg`  | string | 状态描述                                                      |
+| `data` | T      | 业务数据，**后文所有 API 的"响应"部分均指此字段的内容** |
 
 ### 会话 API
 
@@ -80,16 +80,16 @@ POST /session/create
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `task` | string | 是 | 任务描述 |
-| `intent_id` | string | 否 | 意图 ID |
-| `mode` | string | 否 | 模式，可选 `"marketing"` 或留空 |
-| `platform` | string | 否 | 平台标识，可选 `"extension"`（使用插件）/ `"api"`（API 调用）/ `"web"`（Web 端） |
-| `extra` | object | 否 | 扩展参数 |
-| `extra.skills` | `SkillType[]` | 否 | 关联技能列表 |
-| `extra.marketing_product` | `{ product_id }` | 否 | 营销产品 |
-| `extra.strategy` | `{ strategy_key, prompt_id }` | 否 | 营销策略 |
+| 字段                        | 类型                            | 必填 | 说明                                                                                   |
+| --------------------------- | ------------------------------- | ---- | -------------------------------------------------------------------------------------- |
+| `task`                    | string                          | 是   | 任务描述                                                                               |
+| `intent_id`               | string                          | 否   | 意图 ID                                                                                |
+| `mode`                    | string                          | 否   | 模式，可选 `"marketing"` 或留空                                                      |
+| `platform`                | string                          | 否   | 平台标识，可选 `"extension"`（使用插件）/ `"api"`（API 调用）/ `"web"`（Web 端） |
+| `extra`                   | object                          | 否   | 扩展参数                                                                               |
+| `extra.skills`            | `SkillType[]`                 | 否   | 关联技能列表                                                                           |
+| `extra.marketing_product` | `{ product_id }`              | 否   | 营销产品                                                                               |
+| `extra.strategy`          | `{ strategy_key, prompt_id }` | 否   | 营销策略                                                                               |
 
 **响应**
 
@@ -101,7 +101,6 @@ POST /session/create
 
 ---
 
-
 ### 获取会话详情 getSessionInfo
 
 获取已有会话的详细信息。
@@ -112,8 +111,8 @@ POST /session/create
 GET /session/info/{session_id}
 ```
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
+| 参数           | 类型          | 说明    |
+| -------------- | ------------- | ------- |
 | `session_id` | string (path) | 会话 ID |
 
 **响应**
@@ -136,20 +135,20 @@ GET /session/info/{session_id}
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `session_id` | string | 会话唯一标识 |
-| `team_id` | string | 所属团队 ID |
-| `intent_id` | string | 意图 ID |
-| `browser_id` | string | 关联浏览器实例 ID |
-| `status` | string | 会话状态：`"created"`（已创建）/ `"active"`（执行中）/ `"complete"`（完成）/ `"error"`（出错）/ `"stopped"`（已停止）/ `"paused"`（已暂停） |
-| `task` | `{ role, content }[]` | 任务描述 |
-| `task_result` | object | 任务执行结果 |
-| `visibility` | `"private" \| "access_by_url"` | 是否为公开的 |
-| `platform` | string | 平台标识 |
-| `mode` | string? | 模式 |
-| `attachments` | AttachmentType[]? | 附件列表 |
-| `extra` | object? | 扩展信息（技能、营销产品、策略等）结构和创建时传入的一致 |
+| 字段            | 类型                            | 说明                                                                                                                                                    |
+| --------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session_id`  | string                          | 会话唯一标识                                                                                                                                            |
+| `team_id`     | string                          | 所属团队 ID                                                                                                                                             |
+| `intent_id`   | string                          | 意图 ID                                                                                                                                                 |
+| `browser_id`  | string                          | 关联浏览器实例 ID                                                                                                                                       |
+| `status`      | string                          | 会话状态：`"created"`（已创建）/ `"active"`（执行中）/ `"complete"`（完成）/ `"error"`（出错）/ `"stopped"`（已停止）/ `"paused"`（已暂停） |
+| `task`        | `{ role, content }[]`         | 任务描述                                                                                                                                                |
+| `task_result` | object                          | 任务执行结果                                                                                                                                            |
+| `visibility`  | `"private" \| "access_by_url"` | 是否为公开的                                                                                                                                            |
+| `platform`    | string                          | 平台标识                                                                                                                                                |
+| `mode`        | string?                         | 模式                                                                                                                                                    |
+| `attachments` | AttachmentType[]?               | 附件列表                                                                                                                                                |
+| `extra`       | object?                         | 扩展信息（技能、营销产品、策略等）结构和创建时传入的一致                                                                                                |
 
 ---
 
@@ -163,10 +162,10 @@ GET /session/info/{session_id}
 GET /session/marketing/data/{session_id}?type={type}
 ```
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `session_id` | string (path) | 会话 ID |
-| `type` | string (query) | 数据类型，可选 `"reply"` / `"like"` / `"retweet"` / `"tweet"`，留空返回所有类型 |
+| 参数           | 类型           | 说明                                                                                    |
+| -------------- | -------------- | --------------------------------------------------------------------------------------- |
+| `session_id` | string (path)  | 会话 ID                                                                                 |
+| `type`       | string (query) | 数据类型，可选 `"reply"` / `"like"` / `"retweet"` / `"tweet"`，留空返回所有类型 |
 
 **响应**
 
@@ -179,12 +178,12 @@ GET /session/marketing/data/{session_id}?type={type}
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `reply` | `TweetWithReply[]` | 生成的推文回复 |
-| `like` | `TweetInMessage[]` | 匹配到的待点赞推文 |
-| `retweet` | `TweetInMessage[]` | 匹配到的待转推推文 |
-| `tweet` | `TweetWriterData[]` | 创作的营销推文 |
+| 字段        | 类型                  | 说明               |
+| ----------- | --------------------- | ------------------ |
+| `reply`   | `TweetWithReply[]`  | 生成的推文回复     |
+| `like`    | `TweetInMessage[]`  | 匹配到的待点赞推文 |
+| `retweet` | `TweetInMessage[]`  | 匹配到的待转推推文 |
+| `tweet`   | `TweetWriterData[]` | 创作的营销推文     |
 
 > 当指定 `type` 参数时，仅对应字段有数据，其余为空数组。
 
@@ -198,10 +197,10 @@ GET /session/marketing/data/{session_id}?type={type}
 wss://{API_BASE_URL}/session/ws/{session_id}
 ```
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
+| 参数             | 类型   | 说明       |
+| ---------------- | ------ | ---------- |
 | `API_BASE_URL` | string | 服务端地址 |
-| `session_id` | string | 会话 ID |
+| `session_id`   | string | 会话 ID    |
 
 ### 认证方式（二选一）
 
@@ -220,7 +219,7 @@ wss://{API_BASE_URL}/session/ws/{session_id}?api_key={api_key}
 ### 心跳机制
 
 - 使用Ping/Pong检测连接活跃
-- 传输格式:  
+- 传输格式:
 
 客户端发送 `ping`
 
@@ -230,6 +229,7 @@ wss://{API_BASE_URL}/session/ws/{session_id}?api_key={api_key}
     timestamp: 1711234567890,
 }
 ```
+
 心跳响应 `pong`
 
 ```json
@@ -272,26 +272,26 @@ wss://{API_BASE_URL}/session/ws/{session_id}?api_key={api_key}
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `data.messages[].type` | `"task"` | 是 | 消息类型 |
-| `data.messages[].content` | string | 是 | 任务内容 |
-| `data.attachments` | SessionFileType[]  | 否 | 附件列表 |
-| `extra` | object | 否 | 扩展参数 |
-| `extra.skills` | `SkillType[]` | 否 | 关联技能列表 |
-| `extra.marketing_product` | `{ product_id }` | 否 | 营销产品 |
-| `extra.strategy` | `{ strategy_key, prompt_id }` | 否 | 营销策略 |
+| 字段                        | 类型                            | 必填 | 说明         |
+| --------------------------- | ------------------------------- | ---- | ------------ |
+| `data.messages[].type`    | `"task"`                      | 是   | 消息类型     |
+| `data.messages[].content` | string                          | 是   | 任务内容     |
+| `data.attachments`        | SessionFileType[]               | 否   | 附件列表     |
+| `extra`                   | object                          | 否   | 扩展参数     |
+| `extra.skills`            | `SkillType[]`                 | 否   | 关联技能列表 |
+| `extra.marketing_product` | `{ product_id }`              | 否   | 营销产品     |
+| `extra.strategy`          | `{ strategy_key, prompt_id }` | 否   | 营销策略     |
 
 ### 回复 `input` 消息
 
 收到服务端 `type: "input"` 消息后，需根据上下文判断 `input_type`，再发送对应格式的回复：
 
-| 条件 | input_type | 说明 |
-|------|-----------|------|
-| `message.type === "x_confirm"` | `"x_confirm"` | 插件自动执行任务确认 |
-| 上一条消息 `type === "plan"` | `"plan"` | 计划确认 |
-| `source === "marketing_analyst"` | `"text"` | 产品分析报告确认（营销场景），用户需确认或补充产品信息 |
-| 其他 | `"text"` | 普通文本输入 |
+| 条件                               | input_type      | 说明                                                   |
+| ---------------------------------- | --------------- | ------------------------------------------------------ |
+| `message.type === "x_confirm"`   | `"x_confirm"` | 插件自动执行任务确认                                   |
+| 上一条消息 `type === "plan"`     | `"plan"`      | 计划确认                                               |
+| `source === "marketing_analyst"` | `"text"`      | 产品分析报告确认（营销场景），用户需确认或补充产品信息 |
+| 其他                               | `"text"`      | 普通文本输入                                           |
 
 #### 2a. 文本回复 `input` (text)
 
@@ -310,13 +310,13 @@ wss://{API_BASE_URL}/session/ws/{session_id}?api_key={api_key}
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `data.input_type` | `"text"` |  是 | 输入类型 |
-| `data.text` | string |  是 | 回复文本内容，可能是纯文本或 JSON 字符串（含 `message` + `data` 选中项） |
-| `data.request_id` | string |  是 | 对应的请求 ID，从最近一条 `input` 消息的 `message.data.request_id` 获取 |
-| `data.attachments` | SessionFileType[] | 否 | 可选附件 |
-| `data.skills` | SkillType[] | 否 | 可选技能 |
+| 字段                 | 类型              | 必填 | 说明                                                                         |
+| -------------------- | ----------------- | ---- | ---------------------------------------------------------------------------- |
+| `data.input_type`  | `"text"`        | 是   | 输入类型                                                                     |
+| `data.text`        | string            | 是   | 回复文本内容，可能是纯文本或 JSON 字符串（含 `message` + `data` 选中项） |
+| `data.request_id`  | string            | 是   | 对应的请求 ID，从最近一条 `input` 消息的 `message.data.request_id` 获取  |
+| `data.attachments` | SessionFileType[] | 否   | 可选附件                                                                     |
+| `data.skills`      | SkillType[]       | 否   | 可选技能                                                                     |
 
 #### 2b. 计划回复 `input` (plan)
 
@@ -339,13 +339,13 @@ wss://{API_BASE_URL}/session/ws/{session_id}?api_key={api_key}
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `data.input_type` | `"plan"` | 是 | 输入类型 |
-| `data.request_id` | string | 是 | 请求 ID |
-| `data.response.accepted` | boolean | 是 | 是否接受计划 |
-| `data.response.plan` | BasicStep[] | 否 | 接受时附带的计划步骤（可被用户编辑后返回） |
-| `data.response.content` | string | 否 | 拒绝时的说明，如 `"Regenerate a plan that improves on the current plan"` |
+| 字段                       | 类型        | 必填 | 说明                                                                       |
+| -------------------------- | ----------- | ---- | -------------------------------------------------------------------------- |
+| `data.input_type`        | `"plan"`  | 是   | 输入类型                                                                   |
+| `data.request_id`        | string      | 是   | 请求 ID                                                                    |
+| `data.response.accepted` | boolean     | 是   | 是否接受计划                                                               |
+| `data.response.plan`     | BasicStep[] | 否   | 接受时附带的计划步骤（可被用户编辑后返回）                                 |
+| `data.response.content`  | string      | 否   | 拒绝时的说明，如 `"Regenerate a plan that improves on the current plan"` |
 
 #### 2c. 确认回复 `input` (x_confirm)
 
@@ -375,6 +375,7 @@ wss://{API_BASE_URL}/session/ws/{session_id}?api_key={api_key}
   "reason": "可选的暂停原因"
 }
 ```
+
 ```json
 {
   "type": "stop",
@@ -401,24 +402,24 @@ wss://{API_BASE_URL}/session/ws/{session_id}?api_key={api_key}
 
 所有服务端消息都包含以下字段：
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `type` | string | 消息类型 |
-| `message_id` | string | 消息唯一标识 |
-| `source` | string | 来源 Agent ID 或 Team ID |
-| `source_component` | `"wyse_team" \| "wyse_agent" \| "user" \| "system"` | 来源组件类型 |
-| `source_type` | string | 来源类型，如 `"wyse_browser"`, `"user_proxy"`, `"wyse_mate"` 等 |
-| `content` | string | 消息文本内容（markdown） |
-| `created_at` | string | 创建时间 |
-| `browser_id` | string? | 关联的浏览器实例 ID |
-| `session_round` | number? | 会话轮次 |
-| `timestamp` | number? | 时间戳 |
-| `attachments` | AttachmentType[]? | 附件 |
-| `code` | number? | 错误码（错误消息时） |
-| `error` | string? | 错误描述（错误消息时） |
-| `chunk_id` | string \| null? | 分块 ID（流式消息） |
-| `chunk_index` | number? | 分块索引（流式消息） |
-| `delta` | boolean \| null? | 是否为增量消息 |
+| 字段                 | 类型                                               | 说明                                                                  |
+| -------------------- | -------------------------------------------------- | --------------------------------------------------------------------- |
+| `type`             | string                                             | 消息类型                                                              |
+| `message_id`       | string                                             | 消息唯一标识                                                          |
+| `source`           | string                                             | 来源 Agent ID 或 Team ID                                              |
+| `source_component` | `"wyse_team" \| "wyse_agent" \| "user" \| "system"` | 来源组件类型                                                          |
+| `source_type`      | string                                             | 来源类型，如 `"wyse_browser"`, `"user_proxy"`, `"wyse_mate"` 等 |
+| `content`          | string                                             | 消息文本内容（markdown）                                              |
+| `created_at`       | string                                             | 创建时间                                                              |
+| `browser_id`       | string?                                            | 关联的浏览器实例 ID                                                   |
+| `session_round`    | number?                                            | 会话轮次                                                              |
+| `timestamp`        | number?                                            | 时间戳                                                                |
+| `attachments`      | AttachmentType[]?                                  | 附件                                                                  |
+| `code`             | number?                                            | 错误码（错误消息时）                                                  |
+| `error`            | string?                                            | 错误描述（错误消息时）                                                |
+| `chunk_id`         | string\| null?                                     | 分块 ID（流式消息）                                                   |
+| `chunk_index`      | number?                                            | 分块索引（流式消息）                                                  |
+| `delta`            | boolean\| null?                                    | 是否为增量消息                                                        |
 
 ---
 
@@ -496,7 +497,6 @@ wss://{API_BASE_URL}/session/ws/{session_id}?api_key={api_key}
 { "data": { "action": "open", "text": "操作描述", "file_name": "example.py" } }
 ```
 
-
 **`marketing_tweet_reply`** — 营销推文回复（支持分块流式）
 
 流式传输流程：
@@ -534,6 +534,7 @@ chunk 消息示例：
 **`marketing_tweet_interact`** — 营销推文互动（支持分块流式）
 
 流式传输流程与 `marketing_tweet_reply` 一致，区别在于：
+
 - chunk data 类型为 `TweetInMessage`（即不含 `reply` 字段的推文）
 - **下发的 chunk 同时包含点赞（like）和转推（retweet）两类推文**，流式过程中无法区分
 
@@ -642,10 +643,10 @@ chunk 消息示例（同一条推文的两个 chunk，`draft_id` 相同）：
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `status` | `"pending" \| "completed" \| "processing" \| "failed"` | 产品分析状态 |
-| `analysis_result.report_id` | string | 报告 ID，用于获取报告详情或保存修改 |
+| 字段                          | 类型                                                  | 说明                                |
+| ----------------------------- | ----------------------------------------------------- | ----------------------------------- |
+| `status`                    | `"pending" \| "completed" \| "processing" \| "failed"` | 产品分析状态                        |
+| `analysis_result.report_id` | string                                                | 报告 ID，用于获取报告详情或保存修改 |
 
 - **获取报告详情** `GET /dashboard/report/info/{report_id}`
 
@@ -709,11 +710,11 @@ chunk 消息示例（同一条推文的两个 chunk，`draft_id` 相同）：
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `content` | string | 建议内容文本 |
-| `display_type` | `"link" \| "button" \| "text" \| "bool"` | 展示类型 |
-| `url` | string | `display_type` 为 `"link"` 时的跳转链接 |
+| 字段             | 类型                                    | 说明                                        |
+| ---------------- | --------------------------------------- | ------------------------------------------- |
+| `content`      | string                                  | 建议内容文本                                |
+| `display_type` | `"link" \| "button" \| "text" \| "bool"` | 展示类型                                    |
+| `url`          | string                                  | `display_type` 为 `"link"` 时的跳转链接 |
 
 **`skill`** — 技能调用
 skill_name 表示当前正在使用的技能，tool_name 表示使用的tool
@@ -762,11 +763,11 @@ skill_name 表示当前正在使用的技能，tool_name 表示使用的tool
 { "data": { "id": "1", "status": "in_progress", "title": "步骤标题" } }
 ```
 
-| status | 说明 |
-|--------|------|
+| status          | 说明           |
+| --------------- | -------------- |
 | `in_progress` | 开始执行该步骤 |
-| `done` | 该步骤执行完成 |
-| `error` | 该步骤执行失败 |
+| `done`        | 该步骤执行完成 |
+| `error`       | 该步骤执行失败 |
 
 ---
 
@@ -786,22 +787,22 @@ skill_name 表示当前正在使用的技能，tool_name 表示使用的tool
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `code` | number | 错误码 |
+| 字段      | 类型   | 说明     |
+| --------- | ------ | -------- |
+| `code`  | number | 错误码   |
 | `error` | string | 错误描述 |
 
 #### 常见错误码
 
-| 错误码 | 说明 | 建议处理 |
-|--------|------|---------|
+| 错误码   | 说明           | 建议处理     |
+| -------- | -------------- | ------------ |
 | `4000` | 无效的输入参数 | 检查请求参数 |
-| `4200` | 服务容量已满 | 稍后重试 |
-| `4201` | 请求频率超限 | 稍后重试 |
-| `4202` | 提交任务过多 | 稍后重试 |
-| `4203` | 资源未找到 | 检查资源 ID |
-| `4600` | 积分余额不足 | 提示用户充值 |
-| `5000` | 服务器内部错误 | 稍后重试 |
+| `4200` | 服务容量已满   | 稍后重试     |
+| `4201` | 请求频率超限   | 稍后重试     |
+| `4202` | 提交任务过多   | 稍后重试     |
+| `4203` | 资源未找到     | 检查资源 ID  |
+| `4600` | 积分余额不足   | 提示用户充值 |
+| `5000` | 服务器内部错误 | 稍后重试     |
 
 ---
 
@@ -826,11 +827,11 @@ skill_name 表示当前正在使用的技能，tool_name 表示使用的tool
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `content` | string | 最终结果文本（markdown） |
-| `message.data.status` | string? | 若为 `"stopped"` 表示会话被停止而非正常完成 |
-| `message.metadata.type` | `"final_answer"?` | 标记为最终回答
+| 字段                      | 类型                | 说明                                          |
+| ------------------------- | ------------------- | --------------------------------------------- |
+| `content`               | string              | 最终结果文本（markdown）                      |
+| `message.data.status`   | string?             | 若为 `"stopped"` 表示会话被停止而非正常完成 |
+| `message.metadata.type` | `"final_answer"?` | 标记为最终回答                                |
 
 > 收到 `task_result` 后，可能紧接着收到一条 `follow_up_suggestion` 类型的 `rich` 消息，提供后续操作建议。
 
@@ -855,11 +856,10 @@ skill_name 表示当前正在使用的技能，tool_name 表示使用的tool
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `message.type` | `"x_confirm" \| ""` | 输入请求类型。`x_confirm` 表示需要用户确认内容无误开启自动执行插件任务 |
-| `message.data.request_id` | string | **关键字段**，用户回复时必须携带此 ID |
-
+| 字段                        | 类型                 | 说明                                                                     |
+| --------------------------- | -------------------- | ------------------------------------------------------------------------ |
+| `message.type`            | `"x_confirm" \| ""` | 输入请求类型。`x_confirm` 表示需要用户确认内容无误开启自动执行插件任务 |
+| `message.data.request_id` | string               | **关键字段**，用户回复时必须携带此 ID                              |
 
 ---
 
@@ -884,7 +884,6 @@ skill_name 表示当前正在使用的技能，tool_name 表示使用的tool
 ```
 
 ---
-
 
 ## 附录：类型定义速查
 

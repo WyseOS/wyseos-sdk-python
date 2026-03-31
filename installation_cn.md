@@ -1,21 +1,21 @@
 [English](installation.md) | [中文](installation_cn.md)
 
-# Installation Guide
+# 安装指南
 
-Install and configure the WyseOS Python SDK for the latest session protocol.
+安装并配置 WyseOS Python SDK，以使用最新会话协议。
 
-## Requirements
+## 环境要求
 
 - Python 3.9+
-- macOS, Linux, or Windows
+- macOS、Linux 或 Windows
 
-## Install from PyPI
+## 从 PyPI 安装
 
 ```bash
 pip install wyseos-sdk
 ```
 
-## Install from Source
+## 从源码安装
 
 ```bash
 git clone https://github.com/WyseOS/wyseos-sdk-python
@@ -23,27 +23,27 @@ cd wyseos-sdk-python
 python -m venv .venv
 ```
 
-Activate the virtual environment:
+激活虚拟环境：
 
-- macOS/Linux:
+- macOS/Linux：
 
 ```bash
 source .venv/bin/activate
 ```
 
-- Windows (PowerShell):
+- Windows（PowerShell）：
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-Install dependencies and the local package:
+安装依赖并安装本地包：
 
 ```bash
 pip install -e .
 ```
 
-## Basic Verification
+## 基础验证
 
 ```python
 from wyseos.mate import Client, ClientOptions
@@ -52,9 +52,9 @@ client = Client(ClientOptions(api_key="your-api-key"))
 print("SDK loaded, base_url:", client.base_url)
 ```
 
-## Configuration
+## 配置
 
-Create `mate.yaml`:
+创建 `mate.yaml`：
 
 ```yaml
 mate:
@@ -66,7 +66,7 @@ mate:
   timeout: 30
 ```
 
-Load config:
+加载配置：
 
 ```python
 from wyseos.mate import Client, ClientOptions
@@ -78,17 +78,17 @@ except Exception:
     client = Client(ClientOptions(api_key="your-api-key"))
 ```
 
-## Authentication Notes
+## 认证说明
 
-- HTTP:
+- HTTP：
   - `api_key` -> `x-api-key`
-  - `jwt_token` -> `Authorization` (no `Bearer ` prefix)
-- WebSocket:
+  - `jwt_token` -> `Authorization`（不带 `Bearer ` 前缀）
+- WebSocket：
   - API Key query: `?api_key=...`
   - JWT query: `?authorization=...`
 
-## Next
+## 下一步
 
-- Quick Start: `examples/quickstart.md`
-- Protocol Spec: `docs/wyse-session-protocol.md`
-- Full Example: `examples/getting_started/example.py`
+- 快速开始：`examples/quickstart.md`
+- 协议规范：`docs/wyse-session-protocol.md`
+- 完整示例：`examples/getting_started/example.py`
