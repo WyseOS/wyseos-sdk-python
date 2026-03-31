@@ -1,98 +1,74 @@
 # Installation Guide
 
-Install and set up the WyseOS Python SDK.
+Install and configure the WyseOS Python SDK for the latest session protocol.
 
 ## Requirements
 
 - Python 3.9+
-- Windows, macOS, or Linux
+- macOS, Linux, or Windows
 
-## Install
+## Install from PyPI
 
 ```bash
 pip install wyseos-sdk
 ```
 
-## From Source
+## Install from Source
 
 ```bash
 git clone https://github.com/WyseOS/wyseos-sdk-python
 cd wyseos-sdk-python
+python -m venv .venv
+source .venv/bin/activate
 pip install -e .
 ```
 
-## Verify
+## Basic Verification
 
 ```python
-import wyseos.mate
+from wyseos.mate import Client, ClientOptions
 
-print(f"WyseOS SDK Python version: {wyseos.mate.__version__}")
-print("✅ Installation successful!")
+client = Client(ClientOptions(api_key="your-api-key"))
+print("SDK loaded, base_url:", client.base_url)
 ```
-
-## Dependencies
-
-Automatically installed:
-
-- requests ≥ 2.31.0
-- pydantic ≥ 2.0.0
-- websockets ≥ 11.0.0
-- PyYAML ≥ 6.0.0
-- python-socks ≥ 2.7.0
 
 ## Configuration
 
-Create `mate.yaml` in your project root:
+Create `mate.yaml`:
 
 ```yaml
 mate:
+  # Use one of api_key or jwt_token
   api_key: "your-api-key"
+  # jwt_token: "your-jwt-token"
+
   base_url: "https://api.wyseos.com"
   timeout: 30
 ```
 
-Load configuration:
+Load config:
 
 ```python
 from wyseos.mate import Client, ClientOptions
 from wyseos.mate.config import load_config
 
 try:
-    client = Client(load_config())
+    client = Client(load_config("mate.yaml"))
 except Exception:
     client = Client(ClientOptions(api_key="your-api-key"))
 ```
 
-## Virtual Environment (Recommended)
+## Authentication Notes
 
-### venv
+- HTTP:
+  - `api_key` -> `x-api-key`
+  - `jwt_token` -> `Authorization` (no `Bearer ` prefix)
+- WebSocket:
+  - API Key query: `?api_key=...`
+  - JWT query: `?authorization=...`
 
-```bash
-python -m venv wyseos-sdk-env
-# macOS/Linux
-source wyseos-sdk-env/bin/activate
-# Windows
-# wyseos-sdk-env\Scripts\activate
-pip install wyseos-sdk
-```
+## Next
 
-### conda
-
-```bash
-conda create -n wyseos-sdk python=3.9
-conda activate wyseos-sdk
-pip install wyseos-sdk
-```
-
-## Troubleshooting
-
-- **ImportError: No module named 'wyseos.mate'**: Ensure the environment is activated and the package is installed.
-- **ConfigError: Configuration file not found: mate.yaml**: Create `mate.yaml` or pass a custom path to `load_config`.
-- **SSLCertificateError**: Update certificates or configure SSL appropriately in your environment.
-- **Invalid YAML**: Ensure proper YAML syntax and indentation.
-
-## Getting Help
-
-- Issues: https://github.com/WyseOS/wyseos-sdk-python/issues
-- Docs: `README.md`
-- Support: support@wyseos.com 
+- Quick Start: `examples/quickstart.md`
+- Protocol Spec: `docs/wyse-session-protocol.md`
+- Full Example: `examples/getting_started/example.py`

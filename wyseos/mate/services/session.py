@@ -2,11 +2,12 @@
 Session service for the WyseOS SDK Python.
 """
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ..constants import (
     ENDPOINT_SESSION_CREATE,
     ENDPOINT_SESSION_INFO,
+    ENDPOINT_SESSION_MARKETING_DATA,
     ENDPOINT_SESSION_MESSAGES,
     ENDPOINT_SESSION_MESSAGES_BETWEEN,
 )
@@ -182,6 +183,20 @@ class SessionService:
             has_next=has_next,
             has_prev=has_prev,
         )
+
+    def get_marketing_data(
+        self, session_id: str, type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get marketing data for a session (reply/like/retweet/tweet)."""
+        endpoint = ENDPOINT_SESSION_MARKETING_DATA.format(session_id=session_id)
+        params = {}
+        if type:
+            params["type"] = type
+        resp = self.client.get(endpoint=endpoint, result_model=dict, params=params or None)
+        if resp.get("code") != 0:
+            from ..errors import APIError
+            raise APIError(message=resp.get("msg", "Unknown error"), code=resp.get("code"))
+        return resp.get("data", {})
 
     def update_session_name(self, request: UpdateSessionNameRequest) -> None:
         """

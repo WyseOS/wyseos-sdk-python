@@ -98,17 +98,18 @@ class TeamInfo(BaseModel):
 
 
 class Attachments(BaseModel):
-    """File attachments for messages."""
+    """Attachment model compatible with protocol SessionFileType/AttachmentType."""
 
-    attachment_id: str = Field(alias="attachment_id")
-    message_id: str = Field(alias="message_id")
-    file_name: str = Field(alias="file_name")
-    file_type: str = Field(alias="file_type")
-    extension: str
-    file_size: int = Field(alias="file_size")
-    file_url: str = Field(alias="file_url")
-    created_at: str = Field(alias="created_at")
-    updated_at: str = Field(alias="updated_at")
+    file_name: str = Field(default="", alias="file_name")
+    file_url: str = Field(default="", alias="file_url")
+    extension: Optional[str] = None
+    url: Optional[str] = None
+    attachment_id: Optional[str] = Field(default=None, alias="attachment_id")
+    message_id: Optional[str] = Field(default=None, alias="message_id")
+    file_type: Optional[str] = Field(default=None, alias="file_type")
+    file_size: Optional[int] = Field(default=None, alias="file_size")
+    created_at: Optional[str] = Field(default=None, alias="created_at")
+    updated_at: Optional[str] = Field(default=None, alias="updated_at")
 
     class Config:
         validate_by_name = True
@@ -123,42 +124,48 @@ class UserTaskMessage(BaseModel):
 
 
 class MessageResponse(BaseModel):
-    """Response message structure (matches Go MessageResponse)."""
+    """Response message structure aligned with session protocol."""
 
-    message_id: str = Field(alias="message_id")
-    source: str
-    source_type: str = Field(alias="source_type")
-    source_component: str = Field(alias="source_component")
-    content: str
-    message: Any = Field(alias="message")
-    type: str = Field(alias="type")
-    created_at: str = Field(alias="created_at")
+    type: str = ""
+    message_id: str = Field(default="", alias="message_id")
+    source: str = ""
+    source_component: str = Field(default="", alias="source_component")
+    source_type: str = Field(default="", alias="source_type")
+    content: str = ""
+    created_at: str = Field(default="", alias="created_at")
+    browser_id: Optional[str] = Field(default=None, alias="browser_id")
+    session_round: Optional[int] = Field(default=None, alias="session_round")
+    timestamp: Optional[int] = None
     attachments: List["Attachments"] = Field(default_factory=list)
-    session_round: int = Field(alias="session_round")
+    code: Optional[int] = None
+    error: Optional[str] = None
+    chunk_id: Optional[str] = Field(default=None, alias="chunk_id")
+    chunk_index: Optional[int] = Field(default=None, alias="chunk_index")
+    delta: Optional[bool] = None
+    message: Any = None
 
     class Config:
         validate_by_name = True
 
 
 class SessionInfo(BaseModel):
-    """Information about a session (matches Go SessionInfoResponse)."""
+    """Information about a session aligned with session protocol."""
 
     session_id: str = Field(alias="session_id")
-    status: str
-    browser_id: str = Field(alias="browser_id")
-    team_id: str = Field(alias="team_id")
-    intent_id: Optional[str] = Field(alias="intent_id", default=None)
-    name: str
-    task: List[UserTaskMessage] = Field(alias="task")
-    task_result: Dict[str, Any] = Field(alias="task_result")
-    messages: List[MessageResponse] = Field(default_factory=list)
-    duration: int
-    error_message: str = Field(alias="error_message")
+    name: str = ""
+    status: str = ""
+    browser_id: str = Field(default="", alias="browser_id")
+    team_id: Optional[str] = Field(default=None, alias="team_id")
+    intent_id: Optional[str] = Field(default=None, alias="intent_id")
+    task: List[UserTaskMessage] = Field(default_factory=list)
+    task_result: Optional[Dict[str, Any]] = Field(default=None, alias="task_result")
     attachments: List["Attachments"] = Field(default_factory=list)
-    platform: str
-    visibility: str
-    created_at: str = Field(alias="created_at")
-    updated_at: str = Field(alias="updated_at")
+    platform: str = ""
+    mode: Optional[str] = None
+    visibility: str = ""
+    extra: Optional[Dict[str, Any]] = None
+    created_at: str = Field(default="", alias="created_at")
+    updated_at: str = Field(default="", alias="updated_at")
 
     class Config:
         validate_by_name = True
@@ -262,10 +269,13 @@ class CreateAgentRequest(BaseModel):
 
 
 class CreateSessionRequest(BaseModel):
-    """Request to create a new session (matches Go API)."""
+    """Request to create a new session."""
 
-    team_id: Annotated[str, Field(min_length=1, description="Team ID for the session")]
-    task: Annotated[str, Field(min_length=1, description="Task for the session")]
+    task: Annotated[str, Field(min_length=1)]
+    intent_id: Optional[str] = None
+    mode: Optional[str] = None
+    platform: Optional[str] = None
+    extra: Optional[Dict[str, Any]] = None
 
 
 class CreateAPIKeyRequest(BaseModel):
@@ -339,3 +349,64 @@ class UpdateSessionNameRequest(BaseModel):
 
     session_id: str
     title: str
+
+
+# Marketing models
+class TweetMedia(BaseModel):
+    url: str = ""
+    type: str = ""
+    width: int = 0
+    height: int = 0
+    text_url: Optional[str] = None
+    video_url: Optional[str] = None
+    duration_ms: Optional[int] = None
+
+
+class TweetWithReply(BaseModel):
+    reply: str = ""
+    tweet: str = ""
+    tweet_id: str = Field(default="", alias="tweet_id")
+    username: str = ""
+    tweet_time: str = Field(default="", alias="tweet_time")
+    url: str = ""
+    bookmark_count: int = Field(default=0, alias="bookmark_count")
+    favorite_count: int = Field(default=0, alias="favorite_count")
+    quote_count: int = Field(default=0, alias="quote_count")
+    reply_count: int = Field(default=0, alias="reply_count")
+    retweet_count: int = Field(default=0, alias="retweet_count")
+    view_count: int = Field(default=0, alias="view_count")
+    user_profile: Optional[Dict[str, Any]] = Field(default=None, alias="user_profile")
+    media: List[TweetMedia] = Field(default_factory=list)
+
+    class Config:
+        validate_by_name = True
+
+
+class TweetInMessage(BaseModel):
+    """TweetWithReply without reply field, used for like/retweet."""
+
+    tweet: str = ""
+    tweet_id: str = Field(default="", alias="tweet_id")
+    username: str = ""
+    tweet_time: str = Field(default="", alias="tweet_time")
+    url: str = ""
+    bookmark_count: int = Field(default=0, alias="bookmark_count")
+    favorite_count: int = Field(default=0, alias="favorite_count")
+    quote_count: int = Field(default=0, alias="quote_count")
+    reply_count: int = Field(default=0, alias="reply_count")
+    retweet_count: int = Field(default=0, alias="retweet_count")
+    view_count: int = Field(default=0, alias="view_count")
+    user_profile: Optional[Dict[str, Any]] = Field(default=None, alias="user_profile")
+    media: List[TweetMedia] = Field(default_factory=list)
+
+    class Config:
+        validate_by_name = True
+
+
+class TweetWriterData(BaseModel):
+    draft_id: str = Field(default="", alias="draft_id")
+    content: str = ""
+    media: List[TweetMedia] = Field(default_factory=list)
+
+    class Config:
+        validate_by_name = True
