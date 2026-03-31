@@ -351,6 +351,122 @@ class UpdateSessionNameRequest(BaseModel):
     title: str
 
 
+# Product models
+class ProductAttachment(BaseModel):
+    """Attachment payload used by product create API."""
+
+    file_name: str = Field(alias="file_name")
+    file_url: str = Field(alias="file_url")
+
+    class Config:
+        validate_by_name = True
+
+
+class CreateProductRequest(BaseModel):
+    """Request body for POST /dashboard/product/create."""
+
+    product: str
+    attachments: List[ProductAttachment] = Field(default_factory=list)
+
+
+class CreateProductResponse(BaseModel):
+    """Response body for POST /dashboard/product/create."""
+
+    product_id: str = Field(alias="product_id")
+    product_name: str = Field(alias="product_name", default="")
+    status: str = ""
+
+    class Config:
+        validate_by_name = True
+
+
+class AnalysisResult(BaseModel):
+    """Nested analysis result from product info API."""
+
+    report_id: Optional[str] = Field(alias="report_id", default=None)
+
+    class Config:
+        validate_by_name = True
+
+
+class ProductInfo(BaseModel):
+    """Response body for GET /dashboard/product/candidates/{product_id}/info."""
+
+    product_id: str = Field(alias="product_id")
+    product_name: str = Field(alias="product_name", default="")
+    status: str = ""
+    analysis_result: Optional[AnalysisResult] = Field(
+        alias="analysis_result", default=None
+    )
+    description: Optional[str] = None
+    has_guided: Optional[bool] = Field(alias="has_guided", default=None)
+
+    class Config:
+        validate_by_name = True
+
+
+class Campaign(BaseModel):
+    """Campaign item in product report."""
+
+    name: str = ""
+    description: str = ""
+
+
+class IndustryLevel1(BaseModel):
+    """Level1 industry item."""
+
+    id: int = 0
+
+
+class IndustryCondition(BaseModel):
+    """Related industry condition in product report."""
+
+    level1: Optional[IndustryLevel1] = None
+    level2: Optional[List[int]] = None
+
+
+class ProductReport(BaseModel):
+    """Response body for GET /dashboard/report/info/{report_id}."""
+
+    report_id: str = Field(alias="report_id", default="")
+    product_name: str = Field(alias="product_name", default="")
+    target_description: str = Field(alias="target_description", default="")
+    keywords: List[str] = Field(default_factory=list)
+    user_personas: List[str] = Field(alias="user_personas", default_factory=list)
+    user_profiles: List[str] = Field(alias="user_profiles", default_factory=list)
+    competitors: List[str] = Field(default_factory=list)
+    recommended_campaigns: List[Campaign] = Field(
+        alias="recommended_campaigns", default_factory=list
+    )
+    related_links: List[str] = Field(alias="related_links", default_factory=list)
+    related_industries: Optional[List[IndustryCondition]] = Field(
+        alias="related_industries", default=None
+    )
+
+    class Config:
+        validate_by_name = True
+
+
+class Category(BaseModel):
+    """Industry category."""
+
+    id: int = 0
+    zh: str = ""
+    en: str = ""
+    en_desc: str = Field(alias="en_desc", default="")
+    level: int = 0
+
+    class Config:
+        validate_by_name = True
+
+
+class Industry(BaseModel):
+    """Industry tree item from categories API."""
+
+    category: Category
+    subcategories: List[Category] = Field(default_factory=list)
+
+
 # Marketing models
 class TweetMedia(BaseModel):
     url: str = ""

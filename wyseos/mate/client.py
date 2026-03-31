@@ -24,6 +24,7 @@ from .services.agent import AgentService
 from .services.browser import BrowserService
 from .services.file_upload import FileUploadService
 from .services.marketing import MarketingService
+from .services.product import ProductService
 from .services.session import SessionService
 from .services.team import TeamService
 from .services.user import UserService
@@ -53,6 +54,7 @@ class Client:
         self.browser = BrowserService(self)
         self.file_upload = FileUploadService(self)
         self.marketing = MarketingService(self)
+        self.product = ProductService(self)
 
     def _do_request(
         self, method: str, endpoint: str, body: Optional[Dict] = None

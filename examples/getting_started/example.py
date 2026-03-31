@@ -31,15 +31,16 @@ CLI_SAFE_EXTRA_INSTRUCTION = (
 )
 
 
-def create_client() -> Client:
+def create_client() -> Client | None:
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(script_dir, "mate.yaml")
     try:
         print(f"Loading config from {config_path}")
         return Client(load_config(config_path))
     except Exception as e:
-        logger.warning(f"Failed to load mate.yaml, fallback to default config: {e}")
-        return Client(ClientOptions())
+        print(f"Failed to load config: {e}")
+        print("Please configure mate.yaml with a valid api_key or jwt_token.")
+        return None
 
 
 def build_extra(product_id: str) -> Dict:
@@ -51,6 +52,8 @@ def build_extra(product_id: str) -> Dict:
 
 def main():
     client = create_client()
+    if not client:
+        return
 
     task = input("Enter TASK: ").strip()
     if not task:

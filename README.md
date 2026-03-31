@@ -1,3 +1,5 @@
+[English](README.md) | [中文](README_cn.md)
+
 # WyseOS SDK for Python
 
 Official Python SDK for WyseOS session protocol and real-time task execution.
@@ -8,8 +10,57 @@ Official Python SDK for WyseOS session protocol and real-time task execution.
 - `CreateSessionRequest(task, mode, platform, extra)`
 - API Key and JWT dual authentication
 - `TaskRunner` for automated and interactive execution
+- Product analysis: create product, poll status, get report (`ProductService`)
 - Marketing rich-stream support (`marketing_tweet_reply`, `marketing_tweet_interact`, `writer_twitter`)
 - Marketing data APIs and dashboard APIs
+
+## Architecture
+
+```mermaid
+flowchart LR
+    App[User App] --> Client[Client]
+    Client --> Session[SessionService]
+    Client --> Product[ProductService]
+    Client --> Marketing[MarketingService]
+    Client --> Upload[FileUploadService]
+    Session --> HTTP[HTTP API]
+    Product --> HTTP
+    Marketing --> HTTP
+    Upload --> HTTP
+    Session --> Runner[TaskRunner]
+    Runner --> WS[WebSocketClient]
+    WS --> WSS[WebSocket]
+```
+
+## Repository Structure
+
+`__pycache__` directories are runtime artifacts and are omitted below.
+
+```text
+wyseos
+├── __init__.py                 # Package entry
+└── mate                        # Core SDK module
+    ├── __init__.py             # Public module exports
+    ├── client.py               # Top-level client and service wiring
+    ├── config.py               # Config loading and parsing
+    ├── constants.py            # Shared protocol/API constants
+    ├── errors.py               # SDK exception definitions
+    ├── factory.py              # Client/task-runner constructors
+    ├── models.py               # Request/response data models
+    ├── plan.py                 # Plan-related message models
+    ├── services                # Domain service layer
+    │   ├── __init__.py         # Service exports
+    │   ├── agent.py            # Agent APIs
+    │   ├── browser.py          # Browser APIs
+    │   ├── file_upload.py      # File upload and validation APIs
+    │   ├── marketing.py        # Marketing dashboard APIs
+    │   ├── product.py          # Product analysis APIs
+    │   ├── session.py          # Session lifecycle and message APIs
+    │   ├── team.py             # Team APIs
+    │   └── user.py             # User and API key APIs
+    ├── task_runner.py          # Automated/interactive task execution loop
+    └── websocket.py            # WebSocket transport client
+```
 
 ## Installation
 
@@ -65,6 +116,49 @@ task_runner.run_interactive_session(
 ```
 
 More examples: `examples/quickstart.md` and `examples/getting_started/example.py`.
+
+## Product Analysis
+
+Create a product, poll until analysis completes, and get the full report — no WebSocket needed.
+
+```python
+from wyseos.mate import Client
+from wyseos.mate.config import load_config
+
+client = Client(load_config("mate.yaml"))
+
+report = client.product.create_and_wait(
+    product="Notion",                       # product name or URL
+    on_poll=lambda attempt, status: print(f"[{attempt}] {status}"),
+)
+
+print(report.product_name)
+print(report.target_description)
+print(report.keywords)
+print(report.competitors)
+print(report.user_personas)
+print(report.recommended_campaigns)
+```
+
+Lower-level methods are also available:
+
+```python
+from wyseos.mate.models import CreateProductRequest
+
+# Step 1: create
+created = client.product.create(CreateProductRequest(product="Notion"))
+
+# Step 2: poll
+info = client.product.get_info(created.product_id)
+
+# Step 3: get report
+report = client.product.get_report(info.analysis_result.report_id)
+
+# Optional: industry categories
+categories = client.product.get_categories()
+```
+
+Full example: `examples/product_analysis/example.py`.
 
 ## Authentication
 
@@ -144,6 +238,7 @@ client.marketing.get_research_tweets(query_id)
 - `client.session` - create/info/messages/marketing data
 - `client.browser` - browser APIs
 - `client.file_upload` - upload and validation
+- `client.product` - product analysis (create/poll/report/categories)
 - `client.marketing` - dashboard marketing APIs
 
 ## Error Types
@@ -156,8 +251,9 @@ client.marketing.get_research_tweets(query_id)
 
 ## Documentation
 
-- Protocol: `docs/wyse-session-protocol.md`
-- Upgrade notes: `docs/session_protocol_upgrade.md`
+- Session Protocol: `docs/wyse-session-protocol.md`
+- Product API: `docs/api-product-create.md`
 - Quick Start: `examples/quickstart.md`
 - Installation: `installation.md`
-- Full Example: `examples/getting_started/example.py`
+- Marketing Example: `examples/getting_started/example.py`
+- Product Analysis Example: `examples/product_analysis/example.py`
