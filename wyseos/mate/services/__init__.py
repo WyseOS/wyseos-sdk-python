@@ -6,6 +6,7 @@ from .agent import AgentService
 from .browser import BrowserService
 from .file_upload import FileUploadService
 from .marketing import MarketingService
+from .product import ProductService
 from .session import SessionService
 from .team import TeamService
 from .user import UserService
@@ -18,4 +19,5 @@ __all__ = [
     "BrowserService",
     "FileUploadService",
     "MarketingService",
+    "ProductService",
 ]
