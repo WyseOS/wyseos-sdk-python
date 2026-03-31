@@ -9,7 +9,8 @@ __email__ = "info@wyseos.com"
 # Import main classes for easy access
 from .client import Client
 from .config import ClientOptions
-from .errors import APIError, ConfigError, NetworkError, ValidationError, WebSocketError
+from .errors import APIError, ConfigError, NetworkError, SessionExecutionError, ValidationError, WebSocketError
+from .factory import create_task_runner
 
 __all__ = [
     "Client",
@@ -18,5 +19,7 @@ __all__ = [
     "ValidationError",
     "NetworkError",
     "WebSocketError",
+    "SessionExecutionError",
     "ConfigError",
+    "create_task_runner",
 ]

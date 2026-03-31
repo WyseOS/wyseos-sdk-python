@@ -14,21 +14,23 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 STATUS_EMOJI = {
+    "": "[ ]",
     "not_started": "[ ]",
     "in_progress": "[~]",
     "done": "[√]",
-    "skipped": "[-]",
+    "skip": "[-]",
     "error": "[!]",
 }
 
 
 class PlanStatus(str, Enum):
-    """Status for a plan step."""
+    """Status for a plan step, aligned with protocol BasicStep."""
 
+    EMPTY = ""
     NOT_STARTED = "not_started"
     IN_PROGRESS = "in_progress"
     DONE = "done"
-    SKIPPED = "skipped"
+    SKIP = "skip"
     ERROR = "error"
 
 
@@ -109,7 +111,7 @@ class Plan(BaseModel):
         # Determine finished based on leaves (last-level tasks)
         leaves = self.leaves()
         if leaves:
-            terminal = {PlanStatus.DONE, PlanStatus.SKIPPED, PlanStatus.ERROR}
+            terminal = {PlanStatus.DONE, PlanStatus.SKIP, PlanStatus.ERROR}
             if all(step.status in terminal for step in leaves):
                 return PlanOverallStatus.FINISHED
 

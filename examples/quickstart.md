@@ -1,373 +1,144 @@
-# 🚀 Quick Start Guide
+# Quick Start Guide
 
-Get up and running with the WyseOS SDK for Python in minutes.
+This guide follows the latest session protocol in `../docs/wyse-session-protocol.md`.
 
-## 📋 Table of Contents
-
-- [🔧 Setup](#setup)
-- [🔑 Configuration](#configuration)
-- [⚡ Quick Examples](#quick-examples)
-- [🤖 Task Execution](#task-execution)
-- [🔄 Real-time WebSocket](#real-time-websocket)
-- [📂 File Uploads](#file-uploads)
-- [⚠️ Error Handling](#error-handling)
-
-## 🔧 Setup
-
-### 1. Create Virtual Environment (Recommended)
+## 1. Setup
 
 ```bash
-# Using venv
-python -m venv wyseos-sdk-env
-source wyseos-sdk-env/bin/activate  # macOS/Linux
-# .\wyseos-sdk-env\Scripts\activate  # Windows
-
-# Using conda
-conda create -n wyseos-sdk python=3.9
-conda activate wyseos-sdk
-```
-
-### 2. Install SDK
-
-```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install wyseos-sdk
 ```
 
-## 🔑 Configuration
+## 2. Configure Client
 
-### Get Your API Key
-1. 🌐 Sign up at [mate.wyseos.com](https://mate.wyseos.com)
-2. 🔐 Create an API key in your dashboard
-3. 💾 Save it securely
-
-### Configuration File
-
-Create `mate.yaml` in your project directory:
+Create `mate.yaml`:
 
 ```yaml
 mate:
   api_key: "your-api-key"
+  # or jwt_token: "your-jwt-token"
   base_url: "https://api.wyseos.com"
   timeout: 30
 ```
 
-### Initialize Client
+Initialize:
 
 ```python
-import os
-from wyseos.mate import Client, ClientOptions
-from wyseos.mate.config import load_config
-
-# Load from config file
-try:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, "mate.yaml")
-    client = Client(load_config(config_path))
-    print("✅ Configuration loaded successfully")
-except Exception as e:
-    # Fallback to manual configuration
-    client = Client(ClientOptions(api_key="your-api-key"))
-    print("⚠️ Using fallback configuration")
-```
-
-## ⚡ Quick Examples
-
-### 📊 List Resources
-
-```python
-from wyseos.mate.models import ListOptions
-
-# List API keys
-api_keys = client.user.list_api_keys(ListOptions(page_num=1, page_size=10))
-print(f"🔑 Found {api_keys.total} API keys")
-
-# List teams
-teams = client.team.get_list("wyse_mate", ListOptions(page_num=1, page_size=10))
-print(f"👥 Found {teams.total} teams")
-
-# List agents
-agents = client.agent.get_list("all", ListOptions(page_num=1, page_size=10))
-print(f"🤖 Found {agents.total} agents")
-```
-
-### 🎯 Create Session
-
-```python
-from wyseos.mate.models import CreateSessionRequest
-
-# Create a new session
-session_resp = client.session.create(
-    CreateSessionRequest(team_id="wyse_mate", task="Analyze this document")
-)
-session_info = client.session.get_info(session_resp.session_id)
-print(f"📋 Created session: {session_resp.session_id}")
-print(f"📊 Status: {session_info.status}")
-```
-
-## 🤖 Task Execution
-
-The SDK provides two execution modes:
-
-### 🎯 Automated Task Execution
-
-Perfect for fire-and-forget tasks:
-
-```python
-from wyseos.mate.websocket import WebSocketClient, TaskExecutionOptions
-
-# Setup WebSocket client
-ws_client = WebSocketClient(
-    base_url=client.base_url,
-    api_key=client.api_key,
-    session_id=session_info.session_id
-)
-
-# Create task runner
-task_runner = ws_client.create_task_runner(client, session_info)
-
-# Configure execution options
-options = TaskExecutionOptions(
-    auto_accept_plan=True,
-    capture_screenshots=False,  # Performance optimized
-    enable_browser_logging=True,
-    completion_timeout=300  # 5 minutes
-)
-
-# Run task
-result = task_runner.run_task(
-    task="Analyze this data and provide insights",
-    team_id=session_info.team_id,
-    options=options
-)
-
-# Check results
-if result.success:
-    print("✅ Task completed!")
-    print(f"📝 Answer: {result.final_answer}")
-    print(f"⏱️ Duration: {result.session_duration:.1f}s")
-    print(f"📊 Messages: {result.message_count}")
-else:
-    print(f"❌ Task failed: {result.error}")
-```
-
-### 💬 Interactive Session
-
-For tasks requiring user interaction:
-
-```python
-# Configure for interactive use
-options = TaskExecutionOptions(
-    auto_accept_plan=True,
-    capture_screenshots=True,  # Enable for visual tasks
-    completion_timeout=600  # 10 minutes
-)
-
-# Start interactive session
-task_runner.run_interactive_session(
-    initial_task="Help me research this topic",
-    team_id=session_info.team_id,
-    options=options
-)
-
-# Session will prompt for user input
-# Type 'exit', 'quit', or 'q' to end
-# Type 'stop' to halt current task
-```
-
-## 🔄 Real-time WebSocket
-
-### Basic WebSocket Usage
-
-```python
-from wyseos.mate.websocket import WebSocketClient, MessageType
-
-# Create WebSocket connection
-ws = WebSocketClient(
-    base_url=client.base_url,
-    api_key=client.api_key,
-    session_id=session_info.session_id
-)
-
-# Setup handlers
-ws.set_connect_handler(lambda: print("🔗 WebSocket connected"))
-ws.set_disconnect_handler(lambda: print("🔌 WebSocket disconnected"))
-ws.set_message_handler(lambda msg: print(f"📨 Received: {msg.get('type', 'unknown')}"))
-
-# Connect and start task
-ws.connect(session_info.session_id)
-
-# Send start message
-start_message = {
-    "type": MessageType.START,
-    "data": {
-        "messages": [{"type": "task", "content": "Your task here"}],
-        "attachments": [],
-        "team_id": session_info.team_id,
-        "kb_ids": []
-    }
-}
-ws.send_message(start_message)
-
-# Remember to disconnect
-ws.disconnect()
-```
-
-## 📂 File Uploads
-
-### Upload Files for Task Execution
-
-```python
-# Validate and upload files
-uploaded_files = []
-file_paths = ["document.pdf", "data.csv", "image.png"]
-
-for file_path in file_paths:
-    # Validate file
-    is_valid, message = client.file_upload.validate_file(file_path)
-    if is_valid:
-        print(f"✅ Validation passed: {file_path}")
-        
-        # Upload file
-        upload_result = client.file_upload.upload_file(file_path)
-        if upload_result.get("file_url"):
-            file_info = client.file_upload.get_file_info(file_path)
-            uploaded_files.append({
-                "file_name": file_info["name"],
-                "file_url": upload_result["file_url"]
-            })
-            print(f"📤 Uploaded: {file_info['name']}")
-        else:
-            print(f"❌ Upload failed: {upload_result.get('error')}")
-    else:
-        print(f"❌ Validation failed: {message}")
-
-# Use files in task execution
-result = task_runner.run_task(
-    task="Analyze these uploaded files",
-    team_id=session_info.team_id,
-    attachments=uploaded_files,
-    options=options
-)
-```
-
-## ⚠️ Error Handling
-
-### Comprehensive Error Handling
-
-```python
-from wyseos.mate.errors import APIError, ValidationError, NetworkError, ConfigError
-
-try:
-    # Your SDK operations here
-    result = task_runner.run_task(
-        task="Your task",
-        team_id="wyse_mate",
-        options=TaskExecutionOptions()
-    )
-    
-except ValidationError as e:
-    print(f"🔍 Validation error: {e}")
-except APIError as e:
-    status = getattr(e, 'status_code', 'unknown')
-    print(f"🌐 API error [{status}]: {e.message}")
-except NetworkError as e:
-    print(f"📡 Network error: {e}")
-except ConfigError as e:
-    print(f"⚙️ Configuration error: {e}")
-except Exception as e:
-    print(f"💥 Unexpected error: {e}")
-```
-
-### Task Execution Error Handling
-
-```python
-# Check task results
-if result.success:
-    print(f"✅ Success: {result.final_answer}")
-else:
-    print(f"❌ Failed: {result.error}")
-    
-    # Access execution details
-    if result.execution_logs:
-        print(f"📋 Logs: {len(result.execution_logs)} entries")
-    
-    if result.screenshots:
-        print(f"📸 Screenshots: {len(result.screenshots)} captured")
-```
-
-## 🔧 Configuration Options
-
-### TaskExecutionOptions
-
-```python
-from wyseos.mate.websocket import TaskExecutionOptions
-
-options = TaskExecutionOptions(
-    auto_accept_plan=True,           # ✅ Auto-accept execution plans
-    capture_screenshots=False,        # 📸 Capture browser screenshots
-    enable_browser_logging=True,      # 🌐 Log browser activities  
-    enable_event_logging=True,        # 📝 Detailed execution logs
-    completion_timeout=300,           # ⏱️ Timeout in seconds
-    max_user_input_timeout=0          # ⌛ User input timeout (0 = infinite)
-)
-```
-
-## 🔗 Complete Example
-
-```python
-#!/usr/bin/env python3
-import os
 from wyseos.mate import Client
 from wyseos.mate.config import load_config
-from wyseos.mate.models import CreateSessionRequest
-from wyseos.mate.websocket import WebSocketClient, TaskExecutionOptions
 
-def main():
-    # 1. Initialize client
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, "mate.yaml")
-    client = Client(load_config(config_path))
-    
-    # 2. Create session
-    session_resp = client.session.create(
-        CreateSessionRequest(team_id="wyse_mate", task="My task")
-    )
-    session_info = client.session.get_info(session_resp.session_id)
-    
-    # 3. Setup task execution
-    ws_client = WebSocketClient(
-        base_url=client.base_url,
-        api_key=client.api_key,
-        session_id=session_info.session_id
-    )
-    task_runner = ws_client.create_task_runner(client, session_info)
-    
-    # 4. Run task
-    result = task_runner.run_task(
-        task="Analyze market trends for Q4 2024",
-        team_id=session_info.team_id,
-        options=TaskExecutionOptions(auto_accept_plan=True)
-    )
-    
-    # 5. Display results
-    if result.success:
-        print(f"✅ {result.final_answer}")
-    else:
-        print(f"❌ {result.error}")
-
-if __name__ == "__main__":
-    main()
+client = Client(load_config("mate.yaml"))
 ```
 
----
+## 3. Create Session
 
-## 📚 Next Steps
+`CreateSessionRequest` uses `task/mode/platform/extra`.
 
-- 📖 **Full Documentation**: `../README.md`
-- 🛠️ **Installation Guide**: `../installation.md`  
-- 🎯 **Complete Examples**: `getting_started/example.py`
-- 🐛 **Issues & Support**: [GitHub Issues](https://github.com/wyseos/wyseos-sdk-python/issues)
+```python
+from wyseos.mate.models import CreateSessionRequest
 
----
+req = CreateSessionRequest(
+    task="Create a marketing tweet thread for my product",
+    mode="marketing",      # optional
+    platform="api",        # optional
+    extra={                 # optional
+        "marketing_product": {"product_id": "prod_123"},
+        "skills": [{"skill_id": "xxx", "skill_name": "persona"}],
+    },
+)
 
-**🎉 You're ready to build amazing AI-powered applications with WyseOS!**
+session = client.session.create(req)
+session_info = client.session.get_info(session.session_id)
+print("session_id:", session.session_id)
+```
+
+## 4. Run Interactive Session (Marketing)
+
+```python
+from wyseos.mate import create_task_runner
+from wyseos.mate.task_runner import TaskExecutionOptions, TaskMode
+from wyseos.mate.websocket import WebSocketClient
+
+ws_client = WebSocketClient(
+    base_url=client.base_url,
+    api_key=client.api_key or "",
+    jwt_token=client.jwt_token or "",
+    session_id=session_info.session_id,
+)
+
+task_runner = create_task_runner(ws_client, client, session_info)
+
+task_runner.run_interactive_session(
+    initial_task="Generate 3 tweet drafts and recommended replies",
+    attachments=[],
+    task_mode=TaskMode.Marketing,
+    extra=req.extra,
+    options=TaskExecutionOptions(
+        auto_accept_plan=False,
+        capture_screenshots=False,
+        verbose=True,
+        stop_on_x_confirm=True,
+        completion_timeout=600,
+    ),
+)
+```
+
+## 5. Read Marketing Output
+
+During marketing rich streaming, SDK will aggregate chunks and fetch final data by type.
+
+You can also query explicitly:
+
+```python
+reply_data = client.session.get_marketing_data(session.session_id, type="reply")
+like_data = client.session.get_marketing_data(session.session_id, type="like")
+retweet_data = client.session.get_marketing_data(session.session_id, type="retweet")
+tweet_data = client.session.get_marketing_data(session.session_id, type="tweet")
+
+print(len(reply_data.get("reply", [])), "replies")
+print(len(tweet_data.get("tweet", [])), "draft tweets")
+```
+
+Interactive commands:
+
+- `stop` -> send stop message
+- `pause` -> send pause message
+- `exit` / `quit` / `q` -> leave session
+
+## 6. Upload Files
+
+```python
+is_valid, msg = client.file_upload.validate_file("brief.pdf")
+if is_valid:
+    upload = client.file_upload.upload_file("brief.pdf")
+    attachments = [{"file_name": "brief.pdf", "file_url": upload["file_url"]}]
+```
+
+Then pass `attachments` into `run_interactive_session(...)`.
+
+## 7. Error Handling
+
+```python
+from wyseos.mate.errors import APIError, NetworkError, ConfigError, WebSocketError
+
+try:
+    # your SDK calls
+    pass
+except APIError as e:
+    print("APIError:", e)
+except WebSocketError as e:
+    print("WebSocketError:", e)
+except NetworkError as e:
+    print("NetworkError:", e)
+except ConfigError as e:
+    print("ConfigError:", e)
+```
+
+## 8. Related APIs
+
+- `client.session.get_marketing_data(...)`
+- `client.marketing.get_product_info(product_id)`
+- `client.marketing.get_report_detail(report_id)`
+- `client.marketing.update_report(report_id, data)`
+- `client.marketing.get_research_tweets(query_id)`
