@@ -1,20 +1,19 @@
 [English](quickstart.md) | [中文](quickstart_cn.md)
 
-# Quick Start Guide
+# 快速开始指南
 
-This SDK has **two independent scenarios**:
+这个 SDK 有 **两个独立场景**：
 
-* **Marketing (WebSocket + Session APIs)**
+* **营销场景（WebSocket + Session APIs）**
 
-    For interactive generation loops (tweet/reply/like/retweet flows).
+  用于交互式生成循环（tweet/reply/like/retweet 流程）。
+* **产品分析（HTTP 轮询 + Product APIs）**
 
-* **Product Analysis (HTTP Polling + Product APIs)** 
+  用于创建产品、轮询状态和获取最终报告。
 
-    For create-product, poll status, and get final report.
+二者是独立入口，不混用。
 
-They are separate entry points and should not be mixed.
-
-## 1. Setup
+## 1. 环境准备
 
 ```bash
 python -m venv .venv
@@ -22,9 +21,9 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install wyseos-sdk
 ```
 
-## 2. Configure Client
+## 2. 配置客户端
 
-Create `mate.yaml`:
+创建 `mate.yaml`：
 
 ```yaml
 mate:
@@ -34,7 +33,7 @@ mate:
   timeout: 30
 ```
 
-Initialize:
+初始化：
 
 ```python
 from wyseos.mate import Client
@@ -43,18 +42,18 @@ from wyseos.mate.config import load_config
 client = Client(load_config("mate.yaml"))
 ```
 
-## 3. Choose One Workflow
+## 3. 选择一个工作流
 
-| Workflow          | Entry Point                                              | Transport    | Main Output                                |
-| ----------------- | -------------------------------------------------------- | ------------ | ------------------------------------------ |
-| Marketing Session | `create_task_runner(...).run_interactive_session(...)` | WebSocket    | Streamed session messages + marketing data |
-| Product Analysis  | `client.product.create_and_wait(...)`                  | HTTP polling | `ProductReport`                          |
+| 工作流   | 入口                                                     | 传输方式  | 主要输出                |
+| -------- | -------------------------------------------------------- | --------- | ----------------------- |
+| 营销会话 | `create_task_runner(...).run_interactive_session(...)` | WebSocket | 流式会话消息 + 营销数据 |
+| 产品分析 | `client.product.create_and_wait(...)`                  | HTTP 轮询 | `ProductReport`       |
 
 ---
 
-## A) Marketing Session (Independent Flow)
+## A) 营销会话（独立流程）
 
-### A1. Create Session
+### A1. 创建会话
 
 ```python
 from wyseos.mate.models import CreateSessionRequest
@@ -74,7 +73,7 @@ session_info = client.session.get_info(session.session_id)
 print("session_id:", session.session_id)
 ```
 
-### A2. Run Interactive Session
+### A2. 运行交互式会话
 
 ```python
 from wyseos.mate import create_task_runner
@@ -105,7 +104,7 @@ task_runner.run_interactive_session(
 )
 ```
 
-### A3. Read Marketing Data
+### A3. 读取营销数据
 
 ```python
 reply_data = client.session.get_marketing_data(session.session_id, type="reply")
@@ -117,26 +116,26 @@ print(len(reply_data.get("reply", [])), "replies")
 print(len(tweet_data.get("tweet", [])), "draft tweets")
 ```
 
-Interactive commands:
+交互命令：
 
-- `stop` -> send stop message
-- `pause` -> send pause message
-- `exit` / `quit` / `q` -> leave session
+- `stop` -> 发送停止消息
+- `pause` -> 发送暂停消息
+- `exit` / `quit` / `q` -> 退出会话
 
 ---
 
-## B) Product Analysis (Independent Flow)
+## B) 产品分析（独立流程）
 
-### B1. Optional: Upload Attachments
+### B1. 可选：上传附件
 
-Use upload response as the source of truth for `attachments`:
+将上传响应作为 `attachments` 的可信来源：
 
 ```python
 upload = client.file_upload.upload_file("brief.pdf")
 attachments = [{"file_name": upload["file_name"], "file_url": upload["file_url"]}]
 ```
 
-### B2. One-shot API (Recommended)
+### B2. 一步式 API（推荐）
 
 ```python
 report = client.product.create_and_wait(
@@ -151,7 +150,7 @@ print("status:", report.status)
 print("product_name:", report.product_name)
 ```
 
-### B3. Step-by-step API
+### B3. 分步 API
 
 ```python
 from wyseos.mate.models import CreateProductRequest
@@ -165,11 +164,11 @@ if info.analysis_result and info.analysis_result.report_id:
     report = client.product.get_report(info.analysis_result.report_id)
 ```
 
-Runnable example: `examples/product_analysis/example.py`.
+可运行示例：`examples/product_analysis/example.py`。
 
 ---
 
-## 4. Error Handling
+## 4. 错误处理
 
 ```python
 from wyseos.mate.errors import APIError, NetworkError, ConfigError, WebSocketError
@@ -187,15 +186,15 @@ except ConfigError as e:
     print("ConfigError:", e)
 ```
 
-## 5. Related APIs
+## 5. 相关 API
 
-Marketing:
+营销：
 
 - `client.session.get_marketing_data(...)`
 - `client.marketing.update_report(report_id, data)`
 - `client.marketing.get_research_tweets(query_id)`
 
-Product analysis:
+产品分析：
 
 - `client.product.create(request)`
 - `client.product.create_and_wait(product, attachments=None, ...)`

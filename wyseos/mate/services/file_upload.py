@@ -224,10 +224,14 @@ class FileUploadService:
                     )
 
                 upload_result = result.get("data", [])
+                if not isinstance(upload_result, list) or not upload_result:
+                    raise APIError("File upload failed: empty upload result")
+                first_file = upload_result[0] if isinstance(upload_result[0], dict) else {}
 
                 return {
-                    "file_url": upload_result[0].get("file_url"),
-                    "file_name": file_info["name"],
+                    # Always prefer server-returned fields for downstream attachments.
+                    "file_url": first_file.get("file_url"),
+                    "file_name": first_file.get("file_name") or file_info["name"],
                 }
 
         except requests.exceptions.RequestException as e:
