@@ -51,6 +51,18 @@ ENDPOINT_MARKETING_REPORT_INFO = "/dashboard/report/info/{report_id}"
 ENDPOINT_MARKETING_REPORT_UPDATE = "/dashboard/report/update/{report_id}"
 ENDPOINT_MARKETING_RESEARCH_TWEETS = "/dashboard/product/query/results/{query_id}/lists"
 
+# Product endpoints
+ENDPOINT_PRODUCT_CREATE = "/dashboard/product/create"
+ENDPOINT_PRODUCT_CATEGORIES = "/dashboard/categories"
+
+# Product status
+PRODUCT_STATUS_PENDING = "pending"
+PRODUCT_STATUS_COMPLETED = "completed"
+
+# Product polling defaults
+PRODUCT_POLL_INTERVAL = 20  # seconds
+PRODUCT_POLL_MAX_ATTEMPTS = 30  # default 10 minutes timeout
+
 # Browser endpoints
 ENDPOINT_BROWSER_INFO = "/browser/info/{browser_id}"
 ENDPOINT_BROWSER_LIST = "/browser/lists"

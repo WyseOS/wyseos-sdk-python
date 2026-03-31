@@ -887,54 +887,23 @@ class TaskRunner:
             data = {}
         product_id = data.get("product_id", "")
         product_name = data.get("product_name", "")
+        status = data.get("status", "")
+        report_id = data.get("report_id", "")
 
         if options.verbose:
             print(f"  [report] product: {product_name} ({product_id})")
-        if not product_id:
-            return
+            if status:
+                print(f"  [report] status: {status}")
+            if report_id:
+                print(f"  [report] report_id: {report_id}")
 
-        try:
-            product = self.client.marketing.get_product_info(product_id)
-            status = product.get("status", "unknown")
-            if options.verbose:
-                print(f"  [report] product status: {status}")
-
-            analysis_result = product.get("analysis_result") or {}
-            report_id = analysis_result.get("report_id")
-            if status != "completed" or not report_id:
-                return
-
-            report = self.client.marketing.get_report_detail(report_id)
-            if options.verbose:
-                keywords = [str(item) for item in (report.get("keywords", []) or [])]
-                personas = [str(item) for item in (report.get("user_personas", []) or [])]
-                competitors = [str(item) for item in (report.get("competitors", []) or [])]
-                print(f"  [report] target: {report.get('target_description', '')}")
-                print(f"  [report] keywords: {', '.join(keywords)}")
-                print(f"  [report] personas: {', '.join(personas)}")
-                print(f"  [report] competitors: {', '.join(competitors)}")
-                campaigns = report.get("recommended_campaigns", []) or []
-                campaign_names = [
-                    item.get("name", "")
-                    for item in campaigns
-                    if isinstance(item, dict) and item.get("name")
-                ]
-                print(f"  [report] campaigns: {', '.join(campaign_names)}")
-
-            if options.event_logging_enabled:
-                self._log_event(
-                    "marketing_report",
-                    f"product_id={product_id}, status={status}",
-                    timestamp,
-                )
-        except Exception as e:
-            logger.warning(f"Failed to read marketing report for {product_id}: {e}")
-            if options.event_logging_enabled:
-                self._log_event(
-                    "marketing_report",
-                    f"fetch failed: {e}",
-                    timestamp,
-                )
+        if options.event_logging_enabled:
+            status_text = status or "unknown"
+            self._log_event(
+                "marketing_report",
+                f"product_id={product_id}, status={status_text}",
+                timestamp,
+            )
 
     def _handle_marketing_research_tweets(
         self,
