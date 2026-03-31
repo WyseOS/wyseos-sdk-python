@@ -1,3 +1,29 @@
+## 🚀 Release 0.3.1 (2026-03-31)
+
+### ✨ Major Features
+
+- **📦 Product Analysis Service**: New `ProductService` for the full product analysis lifecycle — create, poll, and retrieve reports via REST API (no WebSocket needed).
+  - `client.product.create()` — submit product name or URL with optional attachments
+  - `client.product.get_info()` — poll product generation status
+  - `client.product.get_report()` — get full analysis report (keywords, personas, competitors, campaigns)
+  - `client.product.get_categories()` — retrieve industry classification data
+  - `client.product.create_and_wait()` — high-level method that handles the entire create → poll → report flow with callback support
+- **📊 Product Data Models**: Typed Pydantic models for the product API: `CreateProductRequest`, `CreateProductResponse`, `ProductInfo`, `ProductReport`, `Campaign`, `IndustryCondition`, `Category`, `Industry`
+
+### 🔧 Improvements
+
+- **🔇 Cleaner Logging**: WebSocket connection URL (containing credentials) moved from `INFO` to `DEBUG`; disconnect internals also demoted to `DEBUG`
+- **📋 Better CLI Output**: Plan status updates now use `[plan] status: xxx` format; task result shows `[task_result] completed/stopped`; JSON completion messages parsed to display human-readable reason instead of truncated raw JSON
+- **🛡️ Example Robustness**: Both examples now exit cleanly with a helpful message when `mate.yaml` is missing or has invalid credentials, instead of falling back to empty defaults
+
+### 📝 New Files
+
+- `wyseos/mate/services/product.py` — ProductService implementation
+- `examples/product_analysis/example.py` — standalone product analysis example
+- `docs/api-product-create.md` — product API documentation (Chinese)
+
+📦 See: [wyseos-sdk 0.3.1 on PyPI](https://pypi.org/project/wyseos-sdk/)
+
 ## 🚀 Release 0.3.0 (2026-03-31)
 
 ### ✨ Major Features
