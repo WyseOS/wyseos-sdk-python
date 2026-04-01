@@ -6,7 +6,7 @@ Minimal product analysis example.
 import os
 from typing import Dict, List
 
-from wyseos.mate import Client, ClientOptions
+from wyseos.mate import Client
 from wyseos.mate.config import load_config
 from wyseos.mate.errors import APIError
 
