@@ -1,23 +1,19 @@
+---
+name: wyseos
+description: WyseOS Python SDK for AI-driven marketing content generation and product analysis. Use when building marketing automation (tweet/reply/retweet generation via WebSocket sessions) or product research workflows (market positioning, keywords, competitors, user personas via HTTP polling).
+license: See LICENSE
+compatibility: Requires Python 3.9+
+metadata:
+  author: Wyse
+  version: "0.3.1"
+  package: wyseos-sdk
+  repository: https://github.com/WyseOS/wyseos-sdk-python
+  pypi: https://pypi.org/project/wyseos-sdk/
+---
+
 # WyseOS Skill
 
-## Metadata
-
-| Field      | Value                                       |
-| ---------- | ------------------------------------------- |
-| Name       | wyseos                                      |
-| Version    | 0.3.1                                       |
-| Package    | `wyseos-sdk`                              |
-| Python     | >= 3.9                                      |
-| Author     | Wyse (info@wyseos.com)                      |
-| License    | See LICENSE                                 |
-| Repository | https://github.com/WyseOS/wyseos-sdk-python |
-| PyPI       | https://pypi.org/project/wyseos-sdk/        |
-
-## Introduction
-
-WyseOS Python SDK provides session protocol and real-time task execution capabilities for two core scenarios: **Marketing** (interactive tweet/reply generation via WebSocket) and **Product Analysis** (create product, poll status, retrieve report via HTTP). 
-
-The SDK supports API Key / JWT dual authentication, streaming rich content, and an automated TaskRunner for both headless and interactive workflows.
+WyseOS Python SDK provides two independent workflows: **Marketing Mode** (interactive tweet/reply generation via WebSocket) and **Product Analysis Mode** (create product, poll status, retrieve report via HTTP).
 
 ## Installation
 
@@ -25,7 +21,7 @@ The SDK supports API Key / JWT dual authentication, streaming rich content, and 
 pip install wyseos-sdk
 ```
 
-Or install from source:
+Or from source:
 
 ```bash
 git clone https://github.com/WyseOS/wyseos-sdk-python
@@ -35,24 +31,16 @@ source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 pip install -e .
 ```
 
-### Configuration
-
-Create `mate.yaml` in your project root:
-
-```yaml
-mate:
-  api_key: "your-api-key"       # or use jwt_token
-  base_url: "https://api.wyseos.com"
-  timeout: 30
-```
-
-Initialize client:
+### Initialize Client
 
 ```python
-from wyseos.mate import Client
-from wyseos.mate.config import load_config
+from wyseos.mate import Client, ClientOptions
 
-client = Client(load_config("mate.yaml"))
+client = Client(ClientOptions(
+    api_key="your-api-key",         # or jwt_token="your-jwt-token" (pick one)
+    base_url="https://api.wyseos.com",  # required
+    timeout=30,                     # optional, default 30s
+))
 ```
 
 ## Marketing Mode
@@ -62,13 +50,15 @@ Interactive generation of tweets, replies, likes, and retweets via WebSocket ses
 ### Usage
 
 ```python
-from wyseos.mate import Client, create_task_runner
-from wyseos.mate.config import load_config
+from wyseos.mate import Client, ClientOptions, create_task_runner
 from wyseos.mate.models import CreateSessionRequest
 from wyseos.mate.task_runner import TaskExecutionOptions, TaskMode
 from wyseos.mate.websocket import WebSocketClient
 
-client = Client(load_config("mate.yaml"))
+client = Client(ClientOptions(
+    api_key="your-api-key",
+    base_url="https://api.wyseos.com",
+))
 
 # Create session
 req = CreateSessionRequest(
@@ -114,7 +104,7 @@ like_data    = client.session.get_marketing_data(session.session_id, type="like"
 retweet_data = client.session.get_marketing_data(session.session_id, type="retweet")
 ```
 
-### Product Service APIs
+### Dashboard APIs
 
 ```python
 client.marketing.get_product_info(product_id)
@@ -136,10 +126,12 @@ Create a product, poll until analysis completes, and retrieve the full report. P
 ### Usage (One-shot)
 
 ```python
-from wyseos.mate import Client
-from wyseos.mate.config import load_config
+from wyseos.mate import Client, ClientOptions
 
-client = Client(load_config("mate.yaml"))
+client = Client(ClientOptions(
+    api_key="your-api-key",
+    base_url="https://api.wyseos.com",
+))
 
 report = client.product.create_and_wait(
     product="Notion",                       # product name or URL
@@ -187,7 +179,7 @@ report = client.product.create_and_wait(product="Notion", attachments=attachment
 ## Notes
 
 - **Two independent modes**: Marketing and Product Analysis are separate entry points; do not mix them in a single flow.
-- **Authentication**: Provide either `api_key` or `jwt_token` in `mate.yaml`. HTTP uses `x-api-key` / `Authorization` headers; WebSocket passes credentials as URL query parameters.
-- **Error handling**: The SDK raises `APIError`, `NetworkError`, `WebSocketError`, `ConfigError`, and `SessionExecutionError`. Wrap calls accordingly.
+- **Authentication**: Provide either `api_key` or `jwt_token` in `ClientOptions`. HTTP uses `x-api-key` / `Authorization` headers; WebSocket passes credentials as URL query parameters.
+- **Error handling**: The SDK raises `APIError`, `NetworkError`, `WebSocketError`, `ConfigError`, and `SessionExecutionError`.
 - **Interactive commands** (Marketing mode): type `stop`, `pause`, `exit` / `quit` / `q` during an interactive session to control execution.
-- **TaskExecutionOptions**: Use `verbose=True` for stdout logging, `auto_accept_plan=True` to skip manual plan approval, and `stop_on_x_confirm=True` in CLI/headless environments.
+- **TaskExecutionOptions**: `verbose=True` for stdout logging, `auto_accept_plan=True` to skip manual plan approval, `stop_on_x_confirm=True` in CLI/headless environments.

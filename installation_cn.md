@@ -66,16 +66,16 @@ mate:
   timeout: 30
 ```
 
-加载配置：
+## 客户端初始化
 
 ```python
 from wyseos.mate import Client, ClientOptions
-from wyseos.mate.config import load_config
 
-try:
-    client = Client(load_config("mate.yaml"))
-except Exception:
-    client = Client(ClientOptions(api_key="your-api-key"))
+client = Client(ClientOptions(
+    api_key="your-api-key",             # or jwt_token="your-jwt-token" (pick one)
+    base_url="https://api.wyseos.com",  # required
+    timeout=30,                         # optional, default 30s
+))
 ```
 
 ## 认证说明
