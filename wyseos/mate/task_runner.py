@@ -614,11 +614,7 @@ class TaskRunner:
                 )
 
     def _extension_url_for_x_confirm(self) -> Optional[str]:
-        """Build mate web extension connection URL)."""
-        base = getattr(self.client, "mate_app_url", None)
-        if not base:
-            return None
-        base = str(base).rstrip("/")
+        """Build mate web extension connection URL."""
         query = urlencode(
             {
                 "session-id": self.session_info.session_id,
