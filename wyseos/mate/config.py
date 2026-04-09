@@ -44,7 +44,7 @@ class ClientOptions(BaseModel):
         ge=1,
         le=300,
     )
-
+   
     class Config:
         extra = "forbid"
         validate_assignment = True
