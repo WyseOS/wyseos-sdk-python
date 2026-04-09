@@ -5,10 +5,13 @@ Task runner: high-level task execution interface.
 import datetime
 import json
 import logging
+import platform
+import subprocess
 import threading
 import time
 from enum import Enum
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlencode
 
 from pydantic import BaseModel
 
@@ -25,6 +28,16 @@ from .plan import Plan
 from .websocket import EventLog, InputType, MessageType, PlanType, WebSocketClient
 
 logger = logging.getLogger(__name__)
+
+
+def _open_url(url: str) -> None:
+    """Open URL in the default browser (existing Chrome instance)."""
+    if platform.system() == "Darwin":
+        subprocess.Popen(["open", url])
+    else:
+        subprocess.Popen(["xdg-open", url])
+
+
 FOLLOW_UP_GRACE_SECONDS = 1.5
 CONNECT_WAIT_TIMEOUT_SECONDS = 10.0
 CONNECT_POLL_INTERVAL_SECONDS = 0.05
@@ -600,6 +613,20 @@ class TaskRunner:
                     {"error": str(e)},
                 )
 
+    def _extension_url_for_x_confirm(self) -> Optional[str]:
+        """Build mate web extension URL from config (mate_app_url + session + API key)."""
+        base = getattr(self.client, "mate_app_url", None)
+        if not base:
+            return None
+        base = str(base).rstrip("/")
+        query = urlencode(
+            {
+                "session-id": self.session_info.session_id,
+                "x-api-key": self.client.api_key or "",
+            }
+        )
+        return f"{base}/agent/extension?{query}"
+
     def _handle_input_message(
         self, message: Dict, options: TaskExecutionOptions, timestamp: str
     ):
@@ -653,6 +680,16 @@ class TaskRunner:
                     logger.error(f"Failed to send stop on x_confirm {request_id}: {e}")
                 return
             try:
+                open_url = self._extension_url_for_x_confirm()
+                if open_url:
+                    try:
+                        _open_url(open_url)
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to open browser before x_confirm (url=%s): %s",
+                            open_url,
+                            e,
+                        )
                 resp = WebSocketClient.create_x_confirm_response(request_id)
                 self.ws_client.send_message(resp)
                 self._pending_request_id = None
