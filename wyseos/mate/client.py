@@ -43,7 +43,8 @@ class Client:
         self.api_key = options.api_key
         self.jwt_token = options.jwt_token
         self.timeout = options.timeout or DEFAULT_TIMEOUT
-        self.user_agent = "WyseOSPython/0.2.0"
+        from . import __version__
+        self.user_agent = f"WyseOSPython/{__version__}"
         self.http_client = requests.Session()
 
         # Initialize services

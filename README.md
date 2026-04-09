@@ -73,14 +73,17 @@ See full install guide: `installation.md`.
 ## Quick Start
 
 ```python
-from wyseos.mate import Client, create_task_runner
-from wyseos.mate.config import load_config
+from wyseos.mate import Client, ClientOptions, create_task_runner
 from wyseos.mate.models import CreateSessionRequest
 from wyseos.mate.task_runner import TaskExecutionOptions, TaskMode
 from wyseos.mate.websocket import WebSocketClient
 
 # 1) Initialize client
-client = Client(load_config("mate.yaml"))
+client = Client(ClientOptions(
+    api_key="your-api-key",             # or jwt_token="your-jwt-token" (pick one)
+    base_url="https://api.wyseos.com",  # required
+    timeout=30,                         # optional, default 30s
+))
 
 # 2) Create session (latest protocol fields)
 req = CreateSessionRequest(
@@ -122,10 +125,12 @@ More examples: `examples/quickstart.md` and `examples/getting_started/example.py
 Create a product, poll until analysis completes, and get the full report — no WebSocket needed.
 
 ```python
-from wyseos.mate import Client
-from wyseos.mate.config import load_config
+from wyseos.mate import Client, ClientOptions
 
-client = Client(load_config("mate.yaml"))
+client = Client(ClientOptions(
+    api_key="your-api-key",
+    base_url="https://api.wyseos.com",
+))
 
 report = client.product.create_and_wait(
     product="Notion",                       # product name or URL

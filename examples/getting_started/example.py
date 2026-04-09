@@ -7,7 +7,7 @@ import logging
 import os
 from typing import Dict, List
 
-from wyseos.mate import Client, ClientOptions, create_task_runner
+from wyseos.mate import Client, create_task_runner
 from wyseos.mate.config import load_config
 from wyseos.mate.models import CreateSessionRequest
 from wyseos.mate.task_runner import TaskExecutionOptions, TaskMode
@@ -26,9 +26,7 @@ DEFAULT_MARKETING_SKILLS: List[Dict[str, str]] = [
         "skill_name": "persona",
     }
 ]
-CLI_SAFE_EXTRA_INSTRUCTION = (
-    "只生成内容，不执行发布/点赞/转推等浏览器操作。"
-)
+CLI_SAFE_EXTRA_INSTRUCTION = "Only generate content. Do not perform any browser actions such as posting, liking, or retweeting."
 
 
 def create_client() -> Client | None:
@@ -59,7 +57,7 @@ def main():
     if not task:
         print("TASK is required")
         return
-    task = f"{task}\n\n额外要求：{CLI_SAFE_EXTRA_INSTRUCTION}"
+    # task = f"{task}\n\nExtra Instruction: {CLI_SAFE_EXTRA_INSTRUCTION}"
 
     product_id = input("Enter PRODUCT_ID (optional): ").strip()
     extra = build_extra(product_id)
@@ -86,7 +84,7 @@ def main():
     options = TaskExecutionOptions(
         auto_accept_plan=False,
         verbose=True,
-        stop_on_x_confirm=True,
+        stop_on_x_confirm=False,
         completion_timeout=600,
     )
 
