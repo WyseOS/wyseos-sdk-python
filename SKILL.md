@@ -89,7 +89,7 @@ task_runner.run_interactive_session(
     options=TaskExecutionOptions(
         auto_accept_plan=False,
         verbose=True,
-        stop_on_x_confirm=True,
+        stop_on_x_confirm=False,
         completion_timeout=600,
     ),
 )
