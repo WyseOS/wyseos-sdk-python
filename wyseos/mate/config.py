@@ -44,11 +44,7 @@ class ClientOptions(BaseModel):
         ge=1,
         le=300,
     )
-    mate_app_url: Optional[str] = Field(
-        default=None,
-        description="Web app base URL for opening the agent extension in a browser.",
-    )
-
+   
     class Config:
         extra = "forbid"
         validate_assignment = True
@@ -61,15 +57,6 @@ class ClientOptions(BaseModel):
             if v.endswith("/"):
                 v = v.rstrip("/")
         return v
-
-    @validator("mate_app_url")
-    def validate_mate_app_url(cls, v):
-        if v is None or (isinstance(v, str) and not v.strip()):
-            return None
-        v = v.strip()
-        if not v.startswith(("http://", "https://")):
-            raise ValueError("mate_app_url must start with http:// or https://")
-        return v.rstrip("/")
 
     @validator("api_key")
     def validate_api_key(cls, v):
