@@ -57,7 +57,7 @@ def main():
     if not task:
         print("TASK is required")
         return
-    task = f"{task}\n\nExtra Instruction: {CLI_SAFE_EXTRA_INSTRUCTION}"
+    # task = f"{task}\n\nExtra Instruction: {CLI_SAFE_EXTRA_INSTRUCTION}"
 
     product_id = input("Enter PRODUCT_ID (optional): ").strip()
     extra = build_extra(product_id)
@@ -84,7 +84,7 @@ def main():
     options = TaskExecutionOptions(
         auto_accept_plan=False,
         verbose=True,
-        stop_on_x_confirm=True,
+        stop_on_x_confirm=False,
         completion_timeout=600,
     )
 
