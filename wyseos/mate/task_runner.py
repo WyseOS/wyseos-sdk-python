@@ -614,7 +614,7 @@ class TaskRunner:
                 )
 
     def _extension_url_for_x_confirm(self) -> Optional[str]:
-        """Build mate web extension URL from config (mate_app_url + session + API key)."""
+        """Build mate web extension connection URL)."""
         base = getattr(self.client, "mate_app_url", None)
         if not base:
             return None
@@ -625,7 +625,8 @@ class TaskRunner:
                 "x-api-key": self.client.api_key or "",
             }
         )
-        return f"{base}/agent/extension?{query}"
+        # TODO use production URL later
+        return f"https://wyse-mate-webapp.vercel.app/agent/extension?{query}"
 
     def _handle_input_message(
         self, message: Dict, options: TaskExecutionOptions, timestamp: str

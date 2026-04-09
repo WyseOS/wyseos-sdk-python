@@ -42,7 +42,6 @@ class Client:
         self.base_url = options.base_url or DEFAULT_BASE_URL
         self.api_key = options.api_key
         self.jwt_token = options.jwt_token
-        self.mate_app_url = options.mate_app_url
         self.timeout = options.timeout or DEFAULT_TIMEOUT
         self.user_agent = "WyseOSPython/0.2.0"
         self.http_client = requests.Session()
