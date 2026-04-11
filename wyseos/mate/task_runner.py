@@ -5,6 +5,7 @@ Task runner: high-level task execution interface.
 import datetime
 import json
 import logging
+import os
 import platform
 import subprocess
 import threading
@@ -34,6 +35,8 @@ def _open_url(url: str) -> None:
     """Open URL in the default browser (existing Chrome instance)."""
     if platform.system() == "Darwin":
         subprocess.Popen(["open", url])
+    elif platform.system() == "Windows":
+        os.startfile(url)  # type: ignore[attr-defined]
     else:
         subprocess.Popen(["xdg-open", url])
 
