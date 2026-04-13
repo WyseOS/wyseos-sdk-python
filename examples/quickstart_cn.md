@@ -122,6 +122,24 @@ print(len(tweet_data.get("tweet", [])), "draft tweets")
 - `pause` -> 发送暂停消息
 - `exit` / `quit` / `q` -> 退出会话
 
+### A4. 停止会话（HTTP 或 WebSocket）
+
+结束进行中的会话有两种方式：
+
+1. **HTTP 接口** — 不依赖 WebSocket，使用创建会话时得到的 `session_id`：
+
+```python
+client.session.stop(session.session_id)
+```
+
+2. **WebSocket** — 在已连接的前提下：
+
+```python
+ws_client.send_stop()
+```
+
+交互式命令行里输入 `stop` 与调用 `send_stop()` 等价：都会通过 WebSocket 发送 `type: "stop"` 的消息。HTTP 的 `stop` 则通过 REST 通知服务端结束该会话。
+
 ---
 
 ## B) 产品分析（独立流程）
@@ -190,6 +208,7 @@ except ConfigError as e:
 
 营销：
 
+- `client.session.stop(session_id)`
 - `client.session.get_marketing_data(...)`
 - `client.marketing.update_report(report_id, data)`
 - `client.marketing.get_research_tweets(query_id)`

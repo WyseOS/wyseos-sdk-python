@@ -43,6 +43,7 @@ ENDPOINT_SESSION_LIST = "/session/lists"
 ENDPOINT_SESSION_MESSAGES = "/session/message/lists"
 ENDPOINT_SESSION_MESSAGES_BETWEEN = "/session/message/between"
 ENDPOINT_SESSION_WEBSOCKET = "/session/ws/{session_id}"
+ENDPOINT_SESSION_STOP= "/session/stop/{session_id}"
 
 # Marketing endpoints
 ENDPOINT_SESSION_MARKETING_DATA = "/session/marketing/data/{session_id}"
