@@ -10,6 +10,7 @@ from ..constants import (
     ENDPOINT_SESSION_MARKETING_DATA,
     ENDPOINT_SESSION_MESSAGES,
     ENDPOINT_SESSION_MESSAGES_BETWEEN,
+    ENDPOINT_SESSION_STOP,
 )
 from ..models import (
     APIResponse,
@@ -65,6 +66,16 @@ class SessionService:
                 message=resp.get("msg", "Unknown error"), code=resp.get("code")
             )
         return CreateSessionResponse(**resp["data"])
+    
+    def stop(self, session_id: str) -> None:
+        """
+        Stop a session.
+
+        Args:
+            session_id: ID of the session
+        """
+        endpoint = ENDPOINT_SESSION_STOP.format(session_id=session_id)
+        self.client.post(endpoint=endpoint, body=None, result_model=None)
 
     def get_info(self, session_id: str) -> SessionInfo:
         """
