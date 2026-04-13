@@ -198,7 +198,11 @@ class WebSocketClient:
                     self.websocket.close(), self.loop
                 ).result(timeout=DEFAULT_TIMEOUT)
             except Exception as e:
-                logger.warning(f"Error closing WebSocket connection: {e}")
+                # Connection may already be closed during normal shutdown race conditions.
+                if isinstance(e, RuntimeError) and "Event loop is closed" in str(e):
+                    logger.debug("WebSocket already closed during disconnect")
+                else:
+                    logger.warning(f"Error closing WebSocket connection: {e}")
 
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=DEFAULT_TIMEOUT)

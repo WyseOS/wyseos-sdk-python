@@ -5,11 +5,9 @@ Task runner: high-level task execution interface.
 import datetime
 import json
 import logging
-import os
-import platform
-import subprocess
 import threading
 import time
+import webbrowser
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
@@ -25,20 +23,16 @@ from .constants import (
     RICH_TYPE_WRITER_TWITTER,
 )
 from .errors import SessionExecutionError
+from .extension_host import resolve_extension_webapp_host
 from .plan import Plan
 from .websocket import EventLog, InputType, MessageType, PlanType, WebSocketClient
 
 logger = logging.getLogger(__name__)
 
-
 def _open_url(url: str) -> None:
-    """Open URL in the default browser (existing Chrome instance)."""
-    if platform.system() == "Darwin":
-        subprocess.Popen(["open", url])
-    elif platform.system() == "Windows":
-        os.startfile(url)  # type: ignore[attr-defined]
-    else:
-        subprocess.Popen(["xdg-open", url])
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    webbrowser.open(url, new=2)
 
 
 FOLLOW_UP_GRACE_SECONDS = 1.5
@@ -624,8 +618,8 @@ class TaskRunner:
                 "x-api-key": self.client.api_key or "",
             }
         )
-        # TODO use production URL later
-        return f"https://wyse-mate-webapp.vercel.app/agent/extension?{query}"
+        extension_host = resolve_extension_webapp_host()
+        return f"{extension_host}/agent/extension?{query}"
 
     def _handle_input_message(
         self, message: Dict, options: TaskExecutionOptions, timestamp: str
