@@ -75,7 +75,7 @@ class SessionService:
             session_id: ID of the session
         """
         endpoint = ENDPOINT_SESSION_STOP.format(session_id=session_id)
-        self.client.post(endpoint=endpoint, body=None, result_model=None)
+        self.client.post(endpoint=endpoint, body={}, result_model=None)
 
     def get_info(self, session_id: str) -> SessionInfo:
         """
