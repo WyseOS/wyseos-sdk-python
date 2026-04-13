@@ -123,6 +123,24 @@ Interactive commands:
 - `pause` -> send pause message
 - `exit` / `quit` / `q` -> leave session
 
+### A4. Stop Session (HTTP or WebSocket)
+
+You can stop a running session in two ways:
+
+1. **HTTP API** — no WebSocket required; use the same `session_id` you created earlier:
+
+```python
+client.session.stop(session.session_id)
+```
+
+2. **WebSocket** — while connected:
+
+```python
+ws_client.send_stop()
+```
+
+In the interactive CLI, typing `stop` is equivalent to `send_stop()`: both send a WebSocket message with `type: "stop"`. The HTTP `stop` endpoint notifies the server to end the session over the REST API.
+
 ---
 
 ## B) Product Analysis (Independent Flow)
@@ -191,6 +209,7 @@ except ConfigError as e:
 
 Marketing:
 
+- `client.session.stop(session_id)`
 - `client.session.get_marketing_data(...)`
 - `client.marketing.update_report(report_id, data)`
 - `client.marketing.get_research_tweets(query_id)`
