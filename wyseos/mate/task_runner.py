@@ -23,11 +23,11 @@ from .constants import (
     RICH_TYPE_WRITER_TWITTER,
 )
 from .errors import SessionExecutionError
+from .extension_host import resolve_extension_webapp_host
 from .plan import Plan
 from .websocket import EventLog, InputType, MessageType, PlanType, WebSocketClient
 
 logger = logging.getLogger(__name__)
-
 
 def _open_url(url: str) -> None:
     if not url.startswith(("http://", "https://")):
@@ -618,8 +618,8 @@ class TaskRunner:
                 "x-api-key": self.client.api_key or "",
             }
         )
-        # TODO use production URL later
-        return f"https://wyse-mate-webapp.vercel.app/agent/extension?{query}"
+        extension_host = resolve_extension_webapp_host()
+        return f"{extension_host}/agent/extension?{query}"
 
     def _handle_input_message(
         self, message: Dict, options: TaskExecutionOptions, timestamp: str
