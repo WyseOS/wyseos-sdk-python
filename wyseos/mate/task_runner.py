@@ -5,11 +5,9 @@ Task runner: high-level task execution interface.
 import datetime
 import json
 import logging
-import os
-import platform
-import subprocess
 import threading
 import time
+import webbrowser
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
@@ -32,13 +30,9 @@ logger = logging.getLogger(__name__)
 
 
 def _open_url(url: str) -> None:
-    """Open URL in the default browser (existing Chrome instance)."""
-    if platform.system() == "Darwin":
-        subprocess.Popen(["open", url])
-    elif platform.system() == "Windows":
-        os.startfile(url)  # type: ignore[attr-defined]
-    else:
-        subprocess.Popen(["xdg-open", url])
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    webbrowser.open(url, new=2)
 
 
 FOLLOW_UP_GRACE_SECONDS = 1.5
