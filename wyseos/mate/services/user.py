@@ -94,6 +94,7 @@ class UserService:
             endpoint=ENDPOINT_AUTH_URL,
             result_model=APIResponse[OAuthURLResponse],
             params=params,
+            skip_auth=True,
         )
         return resp.data
 
