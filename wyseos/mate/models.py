@@ -3,7 +3,7 @@ Data models
 """
 
 from datetime import datetime
-from typing import Annotated, Any, Dict, Generic, List, Optional, TypeVar
+from typing import Annotated, Any, Dict, Generic, List, Literal, Optional, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -316,6 +316,31 @@ class OAuthURLResponse(BaseModel):
     """Response for retrieving an OAuth authorization URL."""
 
     auth_url: str
+
+
+class XConnectorAccount(BaseModel):
+    """X (Twitter) connector account information."""
+
+    connector_id: str
+    platform: Literal["x"]
+    external_user_id: str
+    external_username: str
+    expires_at: str
+    updated_at: str
+    status: Literal["connected", "expired"]
+
+
+class ListXAccountsResponse(BaseModel):
+    """Response for listing X connector accounts."""
+
+    items: List[XConnectorAccount]
+
+
+class AuthorizeXAccountRequest(BaseModel):
+    """Request body for authorizing an X connector account."""
+
+    redirect_url: str
+    target_credential_id: Optional[str] = None
 
 
 class ListBrowsersResponse(BaseModel):
