@@ -58,7 +58,11 @@ class Client:
         self.product = ProductService(self)
 
     def _do_request(
-        self, method: str, endpoint: str, body: Optional[Dict] = None
+        self,
+        method: str,
+        endpoint: str,
+        body: Optional[Dict] = None,
+        skip_auth: bool = False,
     ) -> requests.Response:
         url = urljoin(self.base_url, endpoint)
 
@@ -68,10 +72,11 @@ class Client:
             HEADER_ACCEPT: CONTENT_TYPE_JSON,
         }
 
-        if self.jwt_token:
-            headers[HEADER_AUTHORIZATION] = self.jwt_token
-        elif self.api_key:
-            headers[HEADER_API_KEY] = self.api_key
+        if not skip_auth:
+            if self.jwt_token:
+                headers[HEADER_AUTHORIZATION] = self.jwt_token
+            elif self.api_key:
+                headers[HEADER_API_KEY] = self.api_key
 
         try:
             response = self.http_client.request(
@@ -97,10 +102,11 @@ class Client:
         endpoint: str,
         result_model: Type[T],
         params: Optional[Dict[str, str]] = None,
+        skip_auth: bool = False,
     ) -> T:
         if params:
             endpoint = self._build_url(endpoint, params)
-        response = self._do_request("GET", endpoint)
+        response = self._do_request("GET", endpoint, skip_auth=skip_auth)
         if result_model is dict:
             return response.json()
         return result_model.model_validate(response.json())
