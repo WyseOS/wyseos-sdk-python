@@ -312,6 +312,12 @@ class CreateAPIKeyResponse(BaseModel):
     )  # Full key value returned only on creation
 
 
+class OAuthURLResponse(BaseModel):
+    """Response for retrieving an OAuth authorization URL."""
+
+    auth_url: str
+
+
 class ListBrowsersResponse(BaseModel):
     """Response for listing browsers."""
 
