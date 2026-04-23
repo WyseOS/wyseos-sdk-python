@@ -6,10 +6,14 @@ from typing import TYPE_CHECKING, Optional
 
 from ..constants import (
     ENDPOINT_API_KEY_LIST,
+    ENDPOINT_AUTH_URL,
 )
+from ..extension_host import resolve_extension_webapp_host
 from ..models import (
     APIKey,
+    APIResponse,
     ListOptions,
+    OAuthURLResponse,
     PaginatedResponse,
 )
 
@@ -66,3 +70,24 @@ class UserService:
             result_model=PaginatedResponse[APIKey],
             params=params,
         )
+
+    def get_x_oauth_url(self) -> OAuthURLResponse:
+        """
+        Get an OAuth authorization URL for Twitter login.
+
+        Returns:
+            OAuthURLResponse: Response containing the OAuth authorization URL
+        """
+        params = {
+            "type": "login",
+            "platform": "twitter",
+            "credential_type": "api_key",
+            "redirect_url": f"{resolve_extension_webapp_host()}/oauth/twitter",
+        }
+
+        resp = self.client.get(
+            endpoint=ENDPOINT_AUTH_URL,
+            result_model=APIResponse[OAuthURLResponse],
+            params=params,
+        )
+        return resp.data

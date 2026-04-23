@@ -27,6 +27,7 @@ CONTENT_TYPE_MULTIPART = "multipart/form-data"
 # API Endpoints
 # User endpoints
 ENDPOINT_API_KEY_LIST = "/user/apikey/lists"
+ENDPOINT_AUTH_URL = "/auth/url"
 
 # Team endpoints
 ENDPOINT_TEAM_LIST = "/team/lists"
