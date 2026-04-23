@@ -7,12 +7,17 @@ from typing import TYPE_CHECKING, Optional
 from ..constants import (
     ENDPOINT_API_KEY_LIST,
     ENDPOINT_AUTH_URL,
+    ENDPOINT_X_CONNECTOR_ACCOUNTS,
+    ENDPOINT_X_CONNECTOR_AUTHORIZE,
+    ENDPOINT_X_CONNECTOR_DELETE,
 )
 from ..extension_host import resolve_extension_webapp_host
 from ..models import (
     APIKey,
     APIResponse,
+    AuthorizeXAccountRequest,
     ListOptions,
+    ListXAccountsResponse,
     OAuthURLResponse,
     PaginatedResponse,
 )
@@ -91,3 +96,54 @@ class UserService:
             params=params,
         )
         return resp.data
+
+    def list_x_accounts(self) -> ListXAccountsResponse:
+        """
+        List the current user's connected X (Twitter) accounts.
+
+        Returns:
+            ListXAccountsResponse: Response containing the list of X connector accounts
+        """
+        resp = self.client.get(
+            endpoint=ENDPOINT_X_CONNECTOR_ACCOUNTS,
+            result_model=APIResponse[ListXAccountsResponse],
+        )
+        return resp.data
+
+    def authorize_x_account(
+        self, target_credential_id: Optional[str] = None
+    ) -> OAuthURLResponse:
+        """
+        Start the OAuth authorization flow to bind an X (Twitter) account.
+
+        Args:
+            target_credential_id: Optional ID of the credential slot to bind the X
+                account to. When omitted, the backend creates a new credential.
+
+        Returns:
+            OAuthURLResponse: Response containing the authorization URL
+        """
+        payload = AuthorizeXAccountRequest(
+            target_credential_id=target_credential_id,
+            redirect_url=(
+                f"{resolve_extension_webapp_host()}"
+                "/settings/integrations/x/callback?scene=connector_x_bind"
+            ),
+        )
+
+        resp = self.client.post(
+            endpoint=ENDPOINT_X_CONNECTOR_AUTHORIZE,
+            body=payload.model_dump(exclude_none=True),
+            result_model=APIResponse[OAuthURLResponse],
+        )
+        return resp.data
+
+    def delete_x_account(self, credential_id: str) -> None:
+        """
+        Delete a connected X (Twitter) account.
+
+        Args:
+            credential_id: ID of the X connector account to delete
+        """
+        endpoint = ENDPOINT_X_CONNECTOR_DELETE.format(credential_id=credential_id)
+        self.client.delete(endpoint)
