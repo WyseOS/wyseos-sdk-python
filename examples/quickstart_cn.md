@@ -42,7 +42,49 @@ from wyseos.mate.config import load_config
 client = Client(load_config("mate.yaml"))
 ```
 
-## 3. 选择一个工作流
+## 3. 注册账户（两种方式）
+
+登录与注册都可在**不提供** `api_key`、`jwt_token` 的情况下发起（这些接口在 SDK 中走 `skip_auth`）。无密钥时可用 `Client(ClientOptions())` 使用默认 `base_url`，或仅用 `load_config("mate.yaml")` 配置自定义 `base_url`。
+
+1. **邮箱 magic link** — 向邮箱发送登录/注册链接，用户在浏览器中打开完成验证：
+
+```python
+from wyseos.mate import Client, ClientOptions
+
+client = Client(ClientOptions())  # 或使用不含密钥的 mate.yaml
+
+resp = client.user.start_email_verification(
+    email="you@example.com",
+    invite_code=None,  # 可选填邀请码
+)
+# resp.sign_type、resp.pre_auth_id — 用户点击邮件内链接后按产品流程续接
+```
+
+2. **X（Twitter）OAuth** — 获取用于登录/注册的授权 URL，在浏览器中打开完成：
+
+```python
+url_resp = client.user.get_x_oauth_url()
+print(url_resp.auth_url)  # 在浏览器中打开
+```
+
+可运行参考：`examples/auth/auth_example.py`。
+
+## 4. 授权与绑定 X（相关函数）
+
+区分两类场景：**账户登录/注册**（无 API 密钥）与**将 X 账号绑定到已有账户**（登录后使用 `api_key` 或 `jwt_token`）。
+
+| 用途 | 调用 | 是否需要已登录 |
+| ---- | ---- | -------------- |
+| 使用 X 登录或注册 | `client.user.get_x_oauth_url()` | 否 |
+| 列出已绑定的 X 账号 | `client.user.list_x_accounts()` | 是 |
+| 发起绑定或换绑 X（连接器） | `client.user.authorize_x_account(target_connector_id=None)` | 是；可选 `target_connector_id` 指定要写入的凭据位 |
+| 解绑已连接的 X 账号 | `client.user.delete_x_account(connector_id)` | 是 |
+
+`authorize_x_account` 返回 `OAuthURLResponse`，通过 `auth_url` 在浏览器中完成授权。
+
+可运行参考：`examples/auth/connectors_example.py`。
+
+## 5. 选择一个工作流
 
 | 工作流   | 入口                                                     | 传输方式  | 主要输出                |
 | -------- | -------------------------------------------------------- | --------- | ----------------------- |
@@ -186,7 +228,7 @@ if info.analysis_result and info.analysis_result.report_id:
 
 ---
 
-## 4. 错误处理
+## 6. 错误处理
 
 ```python
 from wyseos.mate.errors import APIError, NetworkError, ConfigError, WebSocketError
@@ -204,7 +246,18 @@ except ConfigError as e:
     print("ConfigError:", e)
 ```
 
-## 5. 相关 API
+## 7. 相关 API
+
+账户注册（不需要 `api_key` / `jwt_token`）：
+
+- `client.user.start_email_verification(email, invite_code=None)`
+- `client.user.get_x_oauth_url()`
+
+X 连接器（登录后、带 `api_key` 或 `jwt_token`）：
+
+- `client.user.list_x_accounts()`
+- `client.user.authorize_x_account(target_credential_id=None)`
+- `client.user.delete_x_account(connector_id)`
 
 营销：
 
