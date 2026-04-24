@@ -78,7 +78,7 @@ Distinguish **account login/registration** (no API key) from **binding X to an e
 | ------- | ---- | ------------- |
 | Sign in / sign up with X | `client.user.get_x_oauth_url()` | No |
 | List connected X accounts | `client.user.list_x_accounts()` | Yes |
-| Bind or re-bind an X account (connector) | `client.user.authorize_x_account(target_credential_id=None)` | Yes; optional `target_credential_id` selects the credential slot |
+| Bind or re-bind an X account (connector) | `client.user.authorize_x_account(target_connector_id=None)` | Yes; optional `target_connector_id` selects the credential slot |
 | Remove a connected X account | `client.user.delete_x_account(connector_id)` | Yes |
 
 `authorize_x_account` returns an `OAuthURLResponse` with `auth_url` — open that URL in a browser to complete the connector flow.
@@ -257,7 +257,7 @@ Account registration (no `api_key` / `jwt_token` required):
 X connector (after sign-in, with `api_key` or `jwt_token`):
 
 - `client.user.list_x_accounts()`
-- `client.user.authorize_x_account(target_credential_id=None)`
+- `client.user.authorize_x_account(target_connector_id=None)`
 - `client.user.delete_x_account(connector_id)`
 
 Marketing:

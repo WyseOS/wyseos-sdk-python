@@ -256,7 +256,7 @@ except ConfigError as e:
 X 连接器（登录后、带 `api_key` 或 `jwt_token`）：
 
 - `client.user.list_x_accounts()`
-- `client.user.authorize_x_account(target_credential_id=None)`
+- `client.user.authorize_x_account(target_connector_id=None)`
 - `client.user.delete_x_account(connector_id)`
 
 营销：
