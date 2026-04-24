@@ -27,6 +27,13 @@ CONTENT_TYPE_MULTIPART = "multipart/form-data"
 # API Endpoints
 # User endpoints
 ENDPOINT_API_KEY_LIST = "/user/apikey/lists"
+ENDPOINT_AUTH_URL = "/auth/url"
+ENDPOINT_AUTH_EMAIL_LINK_SIGNINUP = "/auth/otp/signinup"
+
+# X (Twitter) connector endpoints
+ENDPOINT_X_CONNECTOR_ACCOUNTS = "/connectors/v1/x/accounts"
+ENDPOINT_X_CONNECTOR_AUTHORIZE = "/connectors/v1/x/accounts/authorize"
+ENDPOINT_X_CONNECTOR_DELETE = "/connectors/v1/x/accounts/{connector_id}"
 
 # Team endpoints
 ENDPOINT_TEAM_LIST = "/team/lists"
