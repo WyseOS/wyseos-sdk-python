@@ -166,12 +166,12 @@ class UserService:
         )
         return resp.data
 
-    def delete_x_account(self, credential_id: str) -> None:
+    def delete_x_account(self, connector_id: str) -> None:
         """
         Delete a connected X (Twitter) account.
 
         Args:
-            credential_id: ID of the X connector account to delete
+            connector_id: ID of the X connector account to delete
         """
-        endpoint = ENDPOINT_X_CONNECTOR_DELETE.format(credential_id=credential_id)
+        endpoint = ENDPOINT_X_CONNECTOR_DELETE.format(connector_id=connector_id)
         self.client.delete(endpoint)
