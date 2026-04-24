@@ -1,0 +1,157 @@
+name: Codex Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  codex_review:
+    # Keep secrets safe: skip PRs from forks.
+    if: ${{ github.event.pull_request.draft == false && github.event.pull_request.head.repo.fork == false }}
+    runs-on: ubuntu-latest
+    env:
+      # Key fallback order: CODEX_OPENAI_API_KEY -> OPENAI_API_KEY
+      CODEX_OPENAI_API_KEY: ${{ secrets.CODEX_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+      # Base URL fallback order: CODEX_OPENAI_BASE_URL -> OPENAI_BASE_URL
+      CODEX_OPENAI_BASE_URL: ${{ vars.CODEX_OPENAI_BASE_URL || secrets.CODEX_OPENAI_BASE_URL || vars.OPENAI_BASE_URL || secrets.OPENAI_BASE_URL }}
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Pre-fetch base ref
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          git fetch --no-tags origin \
+            "+refs/heads/${PR_BASE_REF}:refs/remotes/origin/${PR_BASE_REF}"
+
+      - name: Build review prompt with exact PR diff
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          cp .github/codex/prompts/review.md codex-review-prompt.md
+          {
+            echo
+            echo "## PR Context"
+            echo
+            echo "This is PR #${PR_NUMBER} for ${GITHUB_REPOSITORY}."
+            echo "Review ONLY the changes introduced by this PR."
+            echo "Use ONLY the exact triple-dot diff below when deciding what belongs to the PR:"
+            echo "- git diff --stat ${PR_BASE_SHA}...${PR_HEAD_SHA}"
+            echo "- git diff --name-only ${PR_BASE_SHA}...${PR_HEAD_SHA}"
+            echo "- git log --oneline ${PR_BASE_SHA}...${PR_HEAD_SHA}"
+            echo "- git diff ${PR_BASE_SHA}...${PR_HEAD_SHA}"
+            echo
+            echo "Do not review code outside this diff, even if it exists on either branch."
+            echo
+            echo "Changed files in this PR:"
+            git diff --name-only "${PR_BASE_SHA}...${PR_HEAD_SHA}" | sed 's/^/- /'
+            echo
+            echo "Pull request title:"
+            printf '%s\n' "${PR_TITLE}"
+            echo
+            echo "Pull request body:"
+            printf '%s\n' "${PR_BODY:-<empty>}"
+          } >> codex-review-prompt.md
+
+      - name: Resolve Codex provider config
+        run: |
+          if [ -z "${CODEX_OPENAI_API_KEY}" ]; then
+            echo "Missing API key. Please set CODEX_OPENAI_API_KEY or OPENAI_API_KEY."
+            exit 1
+          fi
+
+          endpoint=""
+          raw="${CODEX_OPENAI_BASE_URL}"
+          if [ -n "${raw}" ]; then
+            trimmed="${raw%/}"
+            if [[ "${trimmed}" == */responses ]]; then
+              endpoint="${trimmed}"
+            elif [[ "${trimmed}" == */v1 ]]; then
+              endpoint="${trimmed}/responses"
+            else
+              endpoint="${trimmed}/v1/responses"
+            fi
+            echo "Using custom Responses API endpoint: ${endpoint}"
+          else
+            echo "Using default OpenAI Responses API endpoint."
+          fi
+
+          echo "CODEX_RESPONSES_API_ENDPOINT=${endpoint}" >> "${GITHUB_ENV}"
+
+      - name: Run Codex review
+        id: run_codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ env.CODEX_OPENAI_API_KEY }}
+          responses-api-endpoint: ${{ env.CODEX_RESPONSES_API_ENDPOINT }}
+          model: gpt-5.3-codex
+          effort: medium
+          prompt-file: codex-review-prompt.md
+          output-file: codex-output.md
+          safety-strategy: drop-sudo
+          sandbox: workspace-write
+
+      - name: Upsert PR comment
+        if: ${{ steps.run_codex.outputs.final-message != '' }}
+        uses: actions/github-script@v8
+        env:
+          CODEX_FINAL_MESSAGE: ${{ steps.run_codex.outputs.final-message }}
+          MARKER: "<!-- codex-review-comment -->"
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.payload.pull_request.number;
+            const marker = process.env.MARKER;
+            const body = `${marker}\n${process.env.CODEX_FINAL_MESSAGE}`;
+
+            // Reuse one bot comment to avoid noisy duplicates.
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const botComment = comments.find((c) =>
+              c.user?.type === "Bot" &&
+              typeof c.body === "string" &&
+              c.body.includes(marker)
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
