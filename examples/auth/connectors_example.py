@@ -61,7 +61,7 @@ def do_list(client: Client) -> None:
 
 def do_authorize(client: Client) -> None:
     target = input(
-        "Target credential_id (leave empty to create a new connector): "
+        "Target connector_id (leave empty to create a new connector): "
     ).strip()
     try:
         resp = client.user.authorize_x_account(
@@ -76,18 +76,18 @@ def do_authorize(client: Client) -> None:
 
 
 def do_delete(client: Client) -> None:
-    credential_id = input("credential_id to delete: ").strip()
-    if not credential_id:
-        print("credential_id is required.")
+    connector_id = input("connector_id to delete: ").strip()
+    if not connector_id:
+        print("connector_id is required.")
         return
 
     try:
-        client.user.delete_x_account(credential_id)
+        client.user.delete_x_account(connector_id)
     except APIError as exc:
         print(f"Delete failed: {exc}")
         return
 
-    print(f"Deleted X connector {credential_id}.")
+    print(f"Deleted X connector {connector_id}.")
 
 
 def main() -> None:
