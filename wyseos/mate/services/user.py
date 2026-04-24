@@ -139,20 +139,20 @@ class UserService:
         return resp.data
 
     def authorize_x_account(
-        self, target_credential_id: Optional[str] = None
+        self, target_connector_id: Optional[str] = None
     ) -> OAuthURLResponse:
         """
         Start the OAuth authorization flow to bind an X (Twitter) account.
 
         Args:
-            target_credential_id: Optional ID of the credential slot to bind the X
+            target_connector_id: Optional ID of the credential slot to bind the X
                 account to. When omitted, the backend creates a new credential.
 
         Returns:
             OAuthURLResponse: Response containing the authorization URL
         """
         payload = AuthorizeXAccountRequest(
-            target_credential_id=target_credential_id,
+            target_credential_id=target_connector_id,
             redirect_url=(
                 f"{resolve_extension_webapp_host()}"
                 "/settings/integrations/x/callback?scene=connector_x_bind"
