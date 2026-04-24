@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Optional
 
 from ..constants import (
     ENDPOINT_API_KEY_LIST,
+    ENDPOINT_AUTH_EMAIL_LINK_SIGNINUP,
     ENDPOINT_AUTH_URL,
     ENDPOINT_X_CONNECTOR_ACCOUNTS,
     ENDPOINT_X_CONNECTOR_AUTHORIZE,
@@ -19,6 +20,8 @@ from ..models import (
     ListOptions,
     ListXAccountsResponse,
     OAuthURLResponse,
+    EmailLinkVerifyRequest,
+    EmailLinkVerifyResponse,
     PaginatedResponse,
 )
 
@@ -75,6 +78,30 @@ class UserService:
             result_model=PaginatedResponse[APIKey],
             params=params,
         )
+
+    def start_email_verification(
+        self, email: str, invite_code: Optional[str] = None
+    ) -> EmailLinkVerifyResponse:
+        """
+        Start email magic-link sign in / sign up (link sent to the given address).
+
+        Args:
+            email: The email address to send the sign-in link to
+            invite_code: Optional invite code
+
+        Returns:
+            EmailLinkVerifyResponse: Contains sign_type and pre_auth_id for completing
+                verification after the user follows the link.
+        """
+        payload = EmailLinkVerifyRequest(email=email, invite_code=invite_code)
+
+        resp = self.client.post(
+            endpoint=ENDPOINT_AUTH_EMAIL_LINK_SIGNINUP,
+            body=payload.model_dump(exclude_none=True),
+            result_model=APIResponse[EmailLinkVerifyResponse],
+            skip_auth=True,
+        )
+        return resp.data
 
     def get_x_oauth_url(self) -> OAuthURLResponse:
         """

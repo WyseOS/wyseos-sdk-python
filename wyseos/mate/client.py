@@ -139,8 +139,9 @@ class Client:
         endpoint: str,
         body: Optional[Dict] = None,
         result_model: Optional[Type[T]] = None,
+        skip_auth: bool = False,
     ) -> Optional[T]:
-        response = self._do_request("POST", endpoint, body)
+        response = self._do_request("POST", endpoint, body, skip_auth=skip_auth)
         if result_model and response.content:
             if result_model is dict:
                 return response.json()

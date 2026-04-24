@@ -343,6 +343,21 @@ class AuthorizeXAccountRequest(BaseModel):
     target_credential_id: Optional[str] = None
 
 
+class EmailLinkVerifyRequest(BaseModel):
+    """Request body for starting email magic-link sign in / sign up."""
+
+    email: str
+    invite_code: Optional[str] = None
+    credential_type: Literal["api_key"] = "api_key"
+
+
+class EmailLinkVerifyResponse(BaseModel):
+    """Response after requesting a sign-in / sign-up link sent to email."""
+
+    sign_type: str
+    pre_auth_id: str
+
+
 class ListBrowsersResponse(BaseModel):
     """Response for listing browsers."""
 

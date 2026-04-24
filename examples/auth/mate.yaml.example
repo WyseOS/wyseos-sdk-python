@@ -4,6 +4,6 @@ mate:
   timeout: 30
 
   # Required for connectors_example.py (list / authorize / delete X accounts).
-  # Not required for oauth_url_example.py — that endpoint is public.
+  # Not required for auth_example.py — those flows are public.
   # Uncomment and fill in to use connector endpoints:
   # api_key: "your-api-key"
