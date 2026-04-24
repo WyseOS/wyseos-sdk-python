@@ -94,6 +94,14 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> ClientOptions
         if "mate" in config_data and isinstance(config_data["mate"], dict):
             config_data = config_data["mate"]
 
+        # Treat blank credential placeholders (e.g. `api_key: ""` in a template
+        # YAML) as "not set" — Pydantic's min_length=1 would otherwise reject
+        # them and force users to remove the keys entirely.
+        for key in ("api_key", "jwt_token"):
+            value = config_data.get(key)
+            if isinstance(value, str) and value.strip() == "":
+                config_data.pop(key)
+
         return ClientOptions(**config_data)
 
     except IOError as e:

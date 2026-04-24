@@ -43,7 +43,49 @@ from wyseos.mate.config import load_config
 client = Client(load_config("mate.yaml"))
 ```
 
-## 3. Choose One Workflow
+## 3. Register an Account (Two Ways)
+
+Sign-in and sign-up both start without `api_key` or `jwt_token` on the client (these endpoints use `skip_auth=True`). You can use `Client(ClientOptions())` for the default `base_url`, or `load_config("mate.yaml")` if you only need a custom `base_url`.
+
+1. **Email magic link** — send a link to the address; the user opens it in a browser to finish sign-in or sign-up:
+
+```python
+from wyseos.mate import Client, ClientOptions
+
+client = Client(ClientOptions())  # or load_config("mate.yaml") without credentials
+
+resp = client.user.start_email_verification(
+    email="you@example.com",
+    invite_code=None,  # optional invite code
+)
+# resp.sign_type, resp.pre_auth_id — use after the user follows the link per product flow
+```
+
+2. **X (Twitter) OAuth** — get a login URL; open it in a browser to complete sign-in or sign-up with X:
+
+```python
+url_resp = client.user.get_x_oauth_url()
+print(url_resp.auth_url)  # open in browser
+```
+
+Runnable reference: `examples/auth/auth_example.py`.
+
+## 4. X (Twitter) Authorization: Functions
+
+Distinguish **account login/registration** (no API key) from **binding X to an existing account** (requires `api_key` or `jwt_token` after you are signed in).
+
+| Purpose | Call | Auth required |
+| ------- | ---- | ------------- |
+| Sign in / sign up with X | `client.user.get_x_oauth_url()` | No |
+| List connected X accounts | `client.user.list_x_accounts()` | Yes |
+| Bind or re-bind an X account (connector) | `client.user.authorize_x_account(target_connector_id=None)` | Yes; optional `target_connector_id` selects the credential slot |
+| Remove a connected X account | `client.user.delete_x_account(connector_id)` | Yes |
+
+`authorize_x_account` returns an `OAuthURLResponse` with `auth_url` — open that URL in a browser to complete the connector flow.
+
+Runnable reference: `examples/auth/connectors_example.py`.
+
+## 5. Choose One Workflow
 
 | Workflow          | Entry Point                                              | Transport    | Main Output                                |
 | ----------------- | -------------------------------------------------------- | ------------ | ------------------------------------------ |
@@ -187,7 +229,7 @@ Runnable example: `examples/product_analysis/example.py`.
 
 ---
 
-## 4. Error Handling
+## 6. Error Handling
 
 ```python
 from wyseos.mate.errors import APIError, NetworkError, ConfigError, WebSocketError
@@ -205,7 +247,18 @@ except ConfigError as e:
     print("ConfigError:", e)
 ```
 
-## 5. Related APIs
+## 7. Related APIs
+
+Account registration (no `api_key` / `jwt_token` required):
+
+- `client.user.start_email_verification(email, invite_code=None)`
+- `client.user.get_x_oauth_url()`
+
+X connector (after sign-in, with `api_key` or `jwt_token`):
+
+- `client.user.list_x_accounts()`
+- `client.user.authorize_x_account(target_connector_id=None)`
+- `client.user.delete_x_account(connector_id)`
 
 Marketing:
 
