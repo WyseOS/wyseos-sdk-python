@@ -65,7 +65,7 @@ def do_authorize(client: Client) -> None:
     ).strip()
     try:
         resp = client.user.authorize_x_account(
-            target_credential_id=target or None,
+            target_connector_id=target or None,
         )
     except APIError as exc:
         print(f"Authorize failed: {exc}")
