@@ -18,7 +18,7 @@
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install wyseos-sdk
+pip install octoevo
 ```
 
 ## 2. 配置客户端
@@ -29,15 +29,15 @@ pip install wyseos-sdk
 mate:
   api_key: "your-api-key"
   # or jwt_token: "your-jwt-token"
-  base_url: "https://api.wyseos.com"
+  base_url: "https://api.octoevo.ai"
   timeout: 30
 ```
 
 初始化：
 
 ```python
-from wyseos.mate import Client
-from wyseos.mate.config import load_config
+from octoevo.mate import Client
+from octoevo.mate.config import load_config
 
 client = Client(load_config("mate.yaml"))
 ```
@@ -49,7 +49,7 @@ client = Client(load_config("mate.yaml"))
 1. **邮箱 magic link** — 向邮箱发送登录/注册链接，用户在浏览器中打开完成验证：
 
 ```python
-from wyseos.mate import Client, ClientOptions
+from octoevo.mate import Client, ClientOptions
 
 client = Client(ClientOptions())  # 或使用不含密钥的 mate.yaml
 
@@ -98,7 +98,7 @@ print(url_resp.auth_url)  # 在浏览器中打开
 ### A1. 创建会话
 
 ```python
-from wyseos.mate.models import CreateSessionRequest
+from octoevo.mate.models import CreateSessionRequest
 
 req = CreateSessionRequest(
     task="Create a marketing tweet thread for my product",
@@ -118,9 +118,9 @@ print("session_id:", session.session_id)
 ### A2. 运行交互式会话
 
 ```python
-from wyseos.mate import create_task_runner
-from wyseos.mate.task_runner import TaskExecutionOptions, TaskMode
-from wyseos.mate.websocket import WebSocketClient
+from octoevo.mate import create_task_runner
+from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode
+from octoevo.mate.websocket import WebSocketClient
 
 ws_client = WebSocketClient(
     base_url=client.base_url,
@@ -213,7 +213,7 @@ print("product_name:", report.product_name)
 ### B3. 分步 API
 
 ```python
-from wyseos.mate.models import CreateProductRequest
+from octoevo.mate.models import CreateProductRequest
 
 created = client.product.create(
     CreateProductRequest(product="Notion", attachments=attachments)
@@ -231,7 +231,7 @@ if info.analysis_result and info.analysis_result.report_id:
 ## 6. 错误处理
 
 ```python
-from wyseos.mate.errors import APIError, NetworkError, ConfigError, WebSocketError
+from octoevo.mate.errors import APIError, NetworkError, ConfigError, WebSocketError
 
 try:
     # your SDK calls

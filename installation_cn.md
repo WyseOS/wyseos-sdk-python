@@ -2,7 +2,7 @@
 
 # 安装指南
 
-安装并配置 WyseOS Python SDK，以使用最新会话协议。
+安装并配置 OctoEvo Python SDK，以使用最新会话协议。
 
 ## 环境要求
 
@@ -12,7 +12,7 @@
 ## 从 PyPI 安装
 
 ```bash
-pip install wyseos-sdk
+pip install octoevo
 ```
 
 ## 从源码安装
@@ -46,7 +46,7 @@ pip install -e .
 ## 基础验证
 
 ```python
-from wyseos.mate import Client, ClientOptions
+from octoevo.mate import Client, ClientOptions
 
 client = Client(ClientOptions(api_key="your-api-key"))
 print("SDK loaded, base_url:", client.base_url)
@@ -62,18 +62,18 @@ mate:
   api_key: "your-api-key"
   # jwt_token: "your-jwt-token"
 
-  base_url: "https://api.wyseos.com"
+  base_url: "https://api.octoevo.ai"
   timeout: 30
 ```
 
 ## 客户端初始化
 
 ```python
-from wyseos.mate import Client, ClientOptions
+from octoevo.mate import Client, ClientOptions
 
 client = Client(ClientOptions(
     api_key="your-api-key",             # or jwt_token="your-jwt-token" (pick one)
-    base_url="https://api.wyseos.com",  # required
+    base_url="https://api.octoevo.ai",  # required
     timeout=30,                         # optional, default 30s
 ))
 ```

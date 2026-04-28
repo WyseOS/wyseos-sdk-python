@@ -1,6 +1,6 @@
 mate:
   # API base URL (override only when targeting a non-default environment).
-  base_url: "https://api.wyseos.com"
+  base_url: "https://api.octoevo.ai"
   timeout: 30
 
   # Required for connectors_example.py (list / authorize / delete X accounts).

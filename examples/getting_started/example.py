@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Minimal marketing example for WyseOS Python SDK.
+Minimal marketing example for Python SDK.
 """
 
 import logging
 import os
 from typing import Dict, List
 
-from wyseos.mate import Client, create_task_runner
-from wyseos.mate.config import load_config
-from wyseos.mate.models import CreateSessionRequest
-from wyseos.mate.task_runner import TaskExecutionOptions, TaskMode
-from wyseos.mate.websocket import WebSocketClient
+from octoevo.mate import Client, create_task_runner
+from octoevo.mate.config import load_config
+from octoevo.mate.models import CreateSessionRequest
+from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode
+from octoevo.mate.websocket import WebSocketClient
 
 logging.basicConfig(
     level=logging.INFO,

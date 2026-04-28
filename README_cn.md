@@ -1,8 +1,8 @@
 [English](README.md) | [中文](README_cn.md)
 
-# WyseOS Python SDK
+# OctoEvo Python SDK
 
-WyseOS 会话协议与实时任务执行的官方 Python SDK。
+OctoEvo 会话协议与实时任务执行的 Python SDK。
 
 ## 功能亮点
 
@@ -11,7 +11,7 @@ WyseOS 会话协议与实时任务执行的官方 Python SDK。
 - API Key 与 JWT 双认证
 - 用于自动化与交互式执行的 `TaskRunner`
 - 产品分析：创建产品、轮询状态、获取报告（`ProductService`）
-- 营销富流支持（`marketing_tweet_reply`、`marketing_tweet_interact`、`writer_twitter`）
+- 营销流支持（`marketing_tweet_reply`、`marketing_tweet_interact`、`writer_twitter`）
 - 营销数据 API 与看板 API
 
 ## 架构
@@ -37,7 +37,7 @@ flowchart LR
 `__pycache__` 目录是运行时产物，下面已省略。
 
 ```text
-wyseos
+octoevo
 ├── __init__.py                 # 包入口
 └── mate                        # SDK 核心模块
     ├── __init__.py             # 模块对外导出
@@ -65,7 +65,7 @@ wyseos
 ## 安装
 
 ```bash
-pip install wyseos-sdk
+pip install octoevo
 ```
 
 完整安装说明见：`installation_cn.md`。
@@ -73,15 +73,15 @@ pip install wyseos-sdk
 ## 快速开始
 
 ```python
-from wyseos.mate import Client, ClientOptions, create_task_runner
-from wyseos.mate.models import CreateSessionRequest
-from wyseos.mate.task_runner import TaskExecutionOptions, TaskMode
-from wyseos.mate.websocket import WebSocketClient
+from octoevo.mate import Client, ClientOptions, create_task_runner
+from octoevo.mate.models import CreateSessionRequest
+from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode
+from octoevo.mate.websocket import WebSocketClient
 
 # 1) 初始化客户端
 client = Client(ClientOptions(
     api_key="your-api-key",             # or jwt_token="your-jwt-token" (pick one)
-    base_url="https://api.wyseos.com",  # required
+    base_url="https://api.octoevo.ai",  # required
     timeout=30,                         # optional, default 30s
 ))
 
@@ -125,11 +125,11 @@ task_runner.run_interactive_session(
 创建产品，持续轮询直到分析完成，并获取完整报告，无需 WebSocket。
 
 ```python
-from wyseos.mate import Client, ClientOptions
+from octoevo.mate import Client, ClientOptions
 
 client = Client(ClientOptions(
     api_key="your-api-key",
-    base_url="https://api.wyseos.com",
+    base_url="https://api.octoevo.ai",
 ))
 
 report = client.product.create_and_wait(
@@ -148,7 +148,7 @@ print(report.recommended_campaigns)
 也可使用更底层的方法：
 
 ```python
-from wyseos.mate.models import CreateProductRequest
+from octoevo.mate.models import CreateProductRequest
 
 # Step 1: create
 created = client.product.create(CreateProductRequest(product="Notion"))

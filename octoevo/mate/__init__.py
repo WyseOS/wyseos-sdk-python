@@ -1,8 +1,8 @@
 """
-WyseOS Mate Python SDK
+OctoEvo Python SDK
 """
 
-__version__ = __import__("importlib.metadata", fromlist=["version"]).version("wyseos-sdk")
+__version__ = __import__("importlib.metadata", fromlist=["version"]).version("octoevo")
 __author__ = "Wyse"
 __email__ = "info@wyseos.com"
 

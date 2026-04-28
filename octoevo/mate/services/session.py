@@ -1,5 +1,5 @@
 """
-Session service for the WyseOS SDK Python.
+Session service for the SDK Python.
 """
 
 from typing import TYPE_CHECKING, Any, Dict, Optional

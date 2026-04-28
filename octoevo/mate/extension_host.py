@@ -7,7 +7,7 @@ import os
 from typing import Optional
 
 EXTENSION_WEBAPP_HOST_ENV = "MATE_EXTENSION_WEBAPP_HOST"
-DEFAULT_EXTENSION_WEBAPP_HOST = "https://mate.wyseos.com"
+DEFAULT_EXTENSION_WEBAPP_HOST = "https://octoevo.ai"
 
 
 def resolve_build_extension_host() -> Optional[str]:

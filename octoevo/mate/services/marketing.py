@@ -1,5 +1,5 @@
 """
-Marketing service for the WyseOS SDK Python.
+Marketing service for the SDK Python.
 """
 
 from typing import TYPE_CHECKING, Any, Dict

@@ -1,5 +1,5 @@
 """
-User service for the WyseOS SDK Python.
+User service for the SDK Python.
 """
 
 from typing import TYPE_CHECKING, Optional
