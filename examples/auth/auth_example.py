@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import os
 
-from wyseos.mate import Client, ClientOptions
-from wyseos.mate.config import load_config
-from wyseos.mate.errors import APIError
+from octoevo.mate import Client, ClientOptions
+from octoevo.mate.config import load_config
+from octoevo.mate.errors import APIError
 
 
 def create_client() -> Client:

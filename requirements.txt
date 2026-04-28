@@ -1,4 +1,4 @@
-# WyseOS Python SDK Requirements
+# Python SDK Requirements
 
 # HTTP client library
 requests>=2.31.0

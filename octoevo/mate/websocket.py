@@ -75,7 +75,7 @@ class InputType:
 
 
 class WebSocketClient:
-    """WebSocket client for real-time communication with the WyseOS."""
+    """WebSocket client for real-time communication."""
 
     def __init__(
         self,

@@ -1,5 +1,5 @@
 """
-Team service for the WyseOS SDK Python.
+Team service for the SDK Python.
 """
 
 from typing import TYPE_CHECKING, Optional

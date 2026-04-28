@@ -33,7 +33,7 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class Client:
-    """Main API client for the WyseOS."""
+    """Main API client."""
 
     def __init__(self, options: Optional[ClientOptions] = None):
         if options is None:
@@ -44,7 +44,7 @@ class Client:
         self.jwt_token = options.jwt_token
         self.timeout = options.timeout or DEFAULT_TIMEOUT
         from . import __version__
-        self.user_agent = f"WyseOSPython/{__version__}"
+        self.user_agent = f"OcotEvoPython/{__version__}"
         self.http_client = requests.Session()
 
         # Initialize services

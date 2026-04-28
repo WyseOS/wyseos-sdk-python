@@ -6,9 +6,9 @@ Minimal product analysis example.
 import os
 from typing import Dict, List
 
-from wyseos.mate import Client
-from wyseos.mate.config import load_config
-from wyseos.mate.errors import APIError
+from octoevo.mate import Client
+from octoevo.mate.config import load_config
+from octoevo.mate.errors import APIError
 
 
 def create_client() -> Client | None:

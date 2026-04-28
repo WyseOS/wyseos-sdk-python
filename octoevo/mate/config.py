@@ -25,7 +25,7 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class ClientOptions(BaseModel):
-    """Configuration options for the WyseOS client."""
+    """Configuration options for the client."""
 
     api_key: Optional[str] = Field(
         default=None,

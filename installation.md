@@ -2,7 +2,7 @@
 
 # Installation Guide
 
-Install and configure the WyseOS Python SDK for the latest session protocol.
+Install and configure the OctoEvo Python SDK for the latest session protocol.
 
 ## Requirements
 
@@ -12,7 +12,7 @@ Install and configure the WyseOS Python SDK for the latest session protocol.
 ## Install from PyPI
 
 ```bash
-pip install wyseos-sdk
+pip install octoevo
 ```
 
 ## Install from Source
@@ -46,7 +46,7 @@ pip install -e .
 ## Basic Verification
 
 ```python
-from wyseos.mate import Client, ClientOptions
+from octoevo.mate import Client, ClientOptions
 
 client = Client(ClientOptions(api_key="your-api-key"))
 print("SDK loaded, base_url:", client.base_url)
@@ -62,18 +62,18 @@ mate:
   api_key: "your-api-key"
   # jwt_token: "your-jwt-token"
 
-  base_url: "https://api.wyseos.com"
+  base_url: "https://api.octoevo.ai"
   timeout: 30
 ```
 
 ## Client Initialization
 
 ```python
-from wyseos.mate import Client, ClientOptions
+from octoevo.mate import Client, ClientOptions
 
 client = Client(ClientOptions(
     api_key="your-api-key",             # or jwt_token="your-jwt-token" (pick one)
-    base_url="https://api.wyseos.com",  # required
+    base_url="https://api.octoevo.ai",  # required
     timeout=30,                         # optional, default 30s
 ))
 ```

@@ -1,27 +1,27 @@
 # AGENTS Guide
 
-AI agent guidance for `mate-sdk-python`. See `README.md` for user-facing docs.
+AI agent guidance for `octoevo`. See `README.md` for user-facing docs.
 
 ## How To Use
 
 This SDK supports two independent modes and they should be used separately.
 
-1. Install: `pip install wyseos-sdk`
+1. Install: `pip install octoevo`
 2. Configure `mate.yaml` with `api_key` or `jwt_token`：
 
 ```yaml
    mate:
      api_key: "your-api-key"
      # or jwt_token: "your-jwt-token"
-     base_url: "https://api.wyseos.com"
+     base_url: "https://api.octoevo.ai"
      timeout: 30
    ```
 3. Initialize client:
 
 
 ```python
-from wyseos.mate import Client
-from wyseos.mate.config import load_config
+from octoevo.mate import Client
+from octoevo.mate.config import load_config
 
 client = Client(load_config("mate.yaml"))
 ```
@@ -33,11 +33,11 @@ client = Client(load_config("mate.yaml"))
 Use this mode for interactive generation loops (tweet/reply/like/retweet) over WebSocket sessions.
 
 ```python
-from wyseos.mate import Client, create_task_runner
-from wyseos.mate.config import load_config
-from wyseos.mate.models import CreateSessionRequest
-from wyseos.mate.task_runner import TaskExecutionOptions, TaskMode
-from wyseos.mate.websocket import WebSocketClient
+from octoevo.mate import Client, create_task_runner
+from octoevo.mate.config import load_config
+from octoevo.mate.models import CreateSessionRequest
+from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode
+from octoevo.mate.websocket import WebSocketClient
 
 client = Client(load_config("mate.yaml"))
 req = CreateSessionRequest(task="Create launch tweets", mode="marketing", platform="api", extra={})
@@ -66,8 +66,8 @@ Example: [Marketing Example](examples/getting_started/example.py)
 Use this mode for create-product, polling, and report retrieval over HTTP APIs.
 
 ```python
-from wyseos.mate import Client
-from wyseos.mate.config import load_config
+from octoevo.mate import Client
+from octoevo.mate.config import load_config
 
 client = Client(load_config("mate.yaml"))
 report = client.product.create_and_wait(product="Notion")
@@ -86,7 +86,7 @@ Example: [Product Analysis Example](examples/product_analysis/example.py)
 ├── installation_cn.md         # Installation guide (Chinese)
 ├── docs/                      # Protocol and API docs
 ├── examples/                  # Runnable examples and quick-start docs
-└── wyseos/                    # Python package source
+└── octoevo/                   # Python package source
     ├── __init__.py            # Package entry
     └── mate/                  # Core SDK module
         ├── client.py          # Top-level client and service wiring
@@ -131,7 +131,3 @@ flowchart LR
 ## Versioning
 
 - Package version is defined in `pyproject.toml` (`[project].version`).
-- Runtime SDK version fields exist in:
-  - `wyseos/mate/__init__.py` (`__version__`)
-  - `wyseos/mate/client.py` (`self.user_agent`)
-- When bumping versions, keep these values aligned in the same change.

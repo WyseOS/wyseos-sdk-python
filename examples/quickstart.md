@@ -19,7 +19,7 @@ They are separate entry points and should not be mixed.
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install wyseos-sdk
+pip install octoevo
 ```
 
 ## 2. Configure Client
@@ -30,15 +30,15 @@ Create `mate.yaml`:
 mate:
   api_key: "your-api-key"
   # or jwt_token: "your-jwt-token"
-  base_url: "https://api.wyseos.com"
+  base_url: "https://api.octoevo.ai"
   timeout: 30
 ```
 
 Initialize:
 
 ```python
-from wyseos.mate import Client
-from wyseos.mate.config import load_config
+from octoevo.mate import Client
+from octoevo.mate.config import load_config
 
 client = Client(load_config("mate.yaml"))
 ```
@@ -50,7 +50,7 @@ Sign-in and sign-up both start without `api_key` or `jwt_token` on the client (t
 1. **Email magic link** — send a link to the address; the user opens it in a browser to finish sign-in or sign-up:
 
 ```python
-from wyseos.mate import Client, ClientOptions
+from octoevo.mate import Client, ClientOptions
 
 client = Client(ClientOptions())  # or load_config("mate.yaml") without credentials
 
@@ -99,7 +99,7 @@ Runnable reference: `examples/auth/connectors_example.py`.
 ### A1. Create Session
 
 ```python
-from wyseos.mate.models import CreateSessionRequest
+from octoevo.mate.models import CreateSessionRequest
 
 req = CreateSessionRequest(
     task="Create a marketing tweet thread for my product",
@@ -119,9 +119,9 @@ print("session_id:", session.session_id)
 ### A2. Run Interactive Session
 
 ```python
-from wyseos.mate import create_task_runner
-from wyseos.mate.task_runner import TaskExecutionOptions, TaskMode
-from wyseos.mate.websocket import WebSocketClient
+from octoevo.mate import create_task_runner
+from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode
+from octoevo.mate.websocket import WebSocketClient
 
 ws_client = WebSocketClient(
     base_url=client.base_url,
@@ -214,7 +214,7 @@ print("product_name:", report.product_name)
 ### B3. Step-by-step API
 
 ```python
-from wyseos.mate.models import CreateProductRequest
+from octoevo.mate.models import CreateProductRequest
 
 created = client.product.create(
     CreateProductRequest(product="Notion", attachments=attachments)
@@ -232,7 +232,7 @@ Runnable example: `examples/product_analysis/example.py`.
 ## 6. Error Handling
 
 ```python
-from wyseos.mate.errors import APIError, NetworkError, ConfigError, WebSocketError
+from octoevo.mate.errors import APIError, NetworkError, ConfigError, WebSocketError
 
 try:
     # your SDK calls

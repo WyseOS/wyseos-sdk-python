@@ -12,6 +12,7 @@ dist/
 venv/
 env/
 wyseos-sdk-env/
+octoevo-env/
 .venv
 
 # Editors and IDEs

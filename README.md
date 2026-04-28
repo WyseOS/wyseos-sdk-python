@@ -1,8 +1,8 @@
 [English](README.md) | [中文](README_cn.md)
 
-# WyseOS SDK for Python
+# OctoEvo SDK for Python
 
-Official Python SDK for WyseOS session protocol and real-time task execution.
+Python SDK for OctoEvo session protocol and real-time task execution.
 
 ## Highlights
 
@@ -11,7 +11,7 @@ Official Python SDK for WyseOS session protocol and real-time task execution.
 - API Key and JWT dual authentication
 - `TaskRunner` for automated and interactive execution
 - Product analysis: create product, poll status, get report (`ProductService`)
-- Marketing rich-stream support (`marketing_tweet_reply`, `marketing_tweet_interact`, `writer_twitter`)
+- Marketing stream support (`marketing_tweet_reply`, `marketing_tweet_interact`, `writer_twitter`)
 - Marketing data APIs and dashboard APIs
 
 ## Architecture
@@ -37,7 +37,7 @@ flowchart LR
 `__pycache__` directories are runtime artifacts and are omitted below.
 
 ```text
-wyseos
+octoevo
 ├── __init__.py                 # Package entry
 └── mate                        # Core SDK module
     ├── __init__.py             # Public module exports
@@ -65,7 +65,7 @@ wyseos
 ## Installation
 
 ```bash
-pip install wyseos-sdk
+pip install octoevo
 ```
 
 See full install guide: `installation.md`.
@@ -73,15 +73,15 @@ See full install guide: `installation.md`.
 ## Quick Start
 
 ```python
-from wyseos.mate import Client, ClientOptions, create_task_runner
-from wyseos.mate.models import CreateSessionRequest
-from wyseos.mate.task_runner import TaskExecutionOptions, TaskMode
-from wyseos.mate.websocket import WebSocketClient
+from octoevo.mate import Client, ClientOptions, create_task_runner
+from octoevo.mate.models import CreateSessionRequest
+from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode
+from octoevo.mate.websocket import WebSocketClient
 
 # 1) Initialize client
 client = Client(ClientOptions(
     api_key="your-api-key",             # or jwt_token="your-jwt-token" (pick one)
-    base_url="https://api.wyseos.com",  # required
+    base_url="https://api.octoevo.ai",  # required
     timeout=30,                         # optional, default 30s
 ))
 
@@ -125,11 +125,11 @@ More examples: `examples/quickstart.md` and `examples/getting_started/example.py
 Create a product, poll until analysis completes, and get the full report — no WebSocket needed.
 
 ```python
-from wyseos.mate import Client, ClientOptions
+from octoevo.mate import Client, ClientOptions
 
 client = Client(ClientOptions(
     api_key="your-api-key",
-    base_url="https://api.wyseos.com",
+    base_url="https://api.octoevo.ai",
 ))
 
 report = client.product.create_and_wait(
@@ -148,7 +148,7 @@ print(report.recommended_campaigns)
 Lower-level methods are also available:
 
 ```python
-from wyseos.mate.models import CreateProductRequest
+from octoevo.mate.models import CreateProductRequest
 
 # Step 1: create
 created = client.product.create(CreateProductRequest(product="Notion"))

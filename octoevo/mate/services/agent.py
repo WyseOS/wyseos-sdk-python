@@ -1,5 +1,5 @@
 """
-Service for interacting with the Agent endpoints of the WyseOS API.
+Service for interacting with the Agent endpoints of the API.
 """
 
 from typing import TYPE_CHECKING, Optional

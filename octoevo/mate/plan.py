@@ -2,7 +2,7 @@
 Plan models
 
 This module defines a unified plan data structure that supports both
-- Wyse OS plan (single-level list of steps)
+- Plan (single-level list of steps)
 - Deep Research plan (two-level nested steps)
 """
 

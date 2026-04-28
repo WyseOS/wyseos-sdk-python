@@ -1,5 +1,5 @@
 """
-File upload service for the WyseOS SDK Python.
+File upload service for the SDK Python.
 """
 
 import os
