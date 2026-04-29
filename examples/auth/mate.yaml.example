@@ -1,6 +1,6 @@
 mate:
   # API base URL (override only when targeting a non-default environment).
-  base_url: "https://api.octoevo.ai"
+  base_url: "https://api.dev.weclaw.ai"
   timeout: 30
 
   # Required for connectors_example.py (list / authorize / delete X accounts).

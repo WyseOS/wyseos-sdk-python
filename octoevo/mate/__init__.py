@@ -3,8 +3,8 @@ OctoEvo Python SDK
 """
 
 __version__ = __import__("importlib.metadata", fromlist=["version"]).version("octoevo")
-__author__ = "Wyse"
-__email__ = "info@wyseos.com"
+__author__ = "OctoEvo"
+__email__ = "info@octoevo.ai"
 
 # Import main classes for easy access
 from .client import Client

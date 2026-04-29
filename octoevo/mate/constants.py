@@ -8,7 +8,7 @@ This module contains all constants used throughout the SDK.
 DEFAULT_CONFIG_FILE = "mate.yaml"
 
 # Default Configuration
-DEFAULT_BASE_URL = "https://api.octoevo.ai"
+DEFAULT_BASE_URL = "https://api.dev.weclaw.ai"
 DEFAULT_TIMEOUT = 30  # seconds
 
 # HTTP Headers
