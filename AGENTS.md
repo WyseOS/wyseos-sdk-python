@@ -13,7 +13,7 @@ This SDK supports two independent modes and they should be used separately.
    mate:
      api_key: "your-api-key"
      # or jwt_token: "your-jwt-token"
-     base_url: "https://api.octoevo.ai"
+     base_url: "https://api.dev.weclaw.ai"
      timeout: 30
    ```
 3. Initialize client:

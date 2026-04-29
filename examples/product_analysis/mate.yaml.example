@@ -1,7 +1,7 @@
 mate:
   # API Configuration
   api_key: ""
-  base_url: "https://api.octoevo.ai"
+  base_url: "https://api.dev.weclaw.ai"
 
   # Client Configuration
   timeout: 30

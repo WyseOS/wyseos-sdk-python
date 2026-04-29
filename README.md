@@ -81,7 +81,7 @@ from octoevo.mate.websocket import WebSocketClient
 # 1) Initialize client
 client = Client(ClientOptions(
     api_key="your-api-key",             # or jwt_token="your-jwt-token" (pick one)
-    base_url="https://api.octoevo.ai",  # required
+    base_url="https://api.dev.weclaw.ai",  # required
     timeout=30,                         # optional, default 30s
 ))
 
@@ -129,7 +129,7 @@ from octoevo.mate import Client, ClientOptions
 
 client = Client(ClientOptions(
     api_key="your-api-key",
-    base_url="https://api.octoevo.ai",
+    base_url="https://api.dev.weclaw.ai",
 ))
 
 report = client.product.create_and_wait(
