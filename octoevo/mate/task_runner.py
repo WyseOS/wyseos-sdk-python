@@ -192,6 +192,7 @@ class TaskRunner:
         self._pending_request_id = None
         self._pending_input_type = InputType.TEXT
         self._pending_request_at = 0.0
+        self._pending_empty_input_request_id = None
         self._marketing_chunk_buffers = {
             RICH_TYPE_MARKETING_TWEET_REPLY: [],
             RICH_TYPE_MARKETING_TWEET_INTERACT: [],
@@ -318,6 +319,7 @@ class TaskRunner:
         self._pending_request_id = None
         self._pending_input_type = InputType.TEXT
         self._pending_request_at = 0.0
+        self._pending_empty_input_request_id = None
         self._marketing_chunk_buffers = {
             RICH_TYPE_MARKETING_TWEET_REPLY: [],
             RICH_TYPE_MARKETING_TWEET_INTERACT: [],
@@ -448,6 +450,7 @@ class TaskRunner:
                     self._pending_request_id = None
                     self._pending_input_type = InputType.TEXT
                     self._pending_request_at = 0.0
+                    self._pending_empty_input_request_id = None
                     print("→ Sent input response")
 
                 except KeyboardInterrupt:
@@ -676,7 +679,8 @@ class TaskRunner:
         if external_username:
             normalized = external_username.lstrip("@")
             for account in accounts:
-                if account.external_username.lstrip("@") == normalized:
+                account_username = account.external_username or ""
+                if account_username.lstrip("@") == normalized:
                     return account.connector_id
         return None
 
@@ -707,16 +711,18 @@ class TaskRunner:
         reason_code = payload.get("reason_code")
 
         target_connector_id = None
+        checked_accounts = True
         try:
             target_connector_id = self._find_target_x_connector_id(
                 external_user_id=external_user_id,
                 external_username=external_username,
             )
         except Exception as exc:
+            checked_accounts = False
             logger.warning("Failed to list X connector accounts: %s", exc)
             print("WARNING: 无法列出现有 X connector，SDK 不能校验目标账号。请确认接下来授权的 X 账号正确。")
 
-        if target_connector_id is None:
+        if checked_accounts and target_connector_id is None:
             self._warn_x_authorize_target_unverified(external_user_id, external_username)
 
         try:
