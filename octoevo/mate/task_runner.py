@@ -692,12 +692,12 @@ class TaskRunner:
         if external_username or external_user_id:
             handle = f"@{external_username.lstrip('@')}" if external_username else "(unknown handle)"
             print(
-                "WARNING: Agent 要求执行任务的 X 账号为 "
-                f"{handle}（external_user_id={external_user_id or 'unknown'}）。"
+                "WARNING: The agent requested X account "
+                f"{handle} (external_user_id={external_user_id or 'unknown'})."
             )
-            print("请确保接下来打开的网页中登录并授权的是这个账号，否则当前任务将无法继续。")
+            print("Make sure the authorization page is signed in as this account, or the task cannot continue.")
             return
-        print("WARNING: Agent 未提供目标 X 账号标识，请确认接下来授权的 X 账号正确。")
+        print("WARNING: The agent did not provide a target X account. Make sure you authorize the correct account.")
 
     def _handle_x_api_authorize_message(
         self,
@@ -720,7 +720,7 @@ class TaskRunner:
         except Exception as exc:
             checked_accounts = False
             logger.warning("Failed to list X connector accounts: %s", exc)
-            print("WARNING: 无法列出现有 X connector，SDK 不能校验目标账号。请确认接下来授权的 X 账号正确。")
+            print("WARNING: Could not list X connector accounts. Make sure you authorize the correct X account.")
 
         if checked_accounts and target_connector_id is None:
             self._warn_x_authorize_target_unverified(external_user_id, external_username)
@@ -734,10 +734,15 @@ class TaskRunner:
             print(f"X authorization failed: {exc}")
             if options.event_logging_enabled:
                 self._log_event("error", f"x_api_authorize failed: {exc}", timestamp)
+            self._pending_request_id = request_id
+            self._pending_input_type = InputType.TEXT
+            self._pending_request_at = time.time()
+            self._pending_empty_input_request_id = request_id
+            print("Could not create the authorization URL. Press Enter here to notify the agent and continue.")
             return
 
         _show_or_open_url(resp.auth_url, options, "Open this URL to authorize X API access")
-        print("请在浏览器中完成授权后，回到此终端按回车键（或输入任意内容）以继续当前任务。")
+        print("After completing authorization in the browser, return here and press Enter to continue this task.")
 
         self._pending_request_id = request_id
         self._pending_input_type = InputType.TEXT
