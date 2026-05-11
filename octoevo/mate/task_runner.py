@@ -29,10 +29,29 @@ from .websocket import EventLog, InputType, MessageType, PlanType, WebSocketClie
 
 logger = logging.getLogger(__name__)
 
-def _open_url(url: str) -> None:
+
+def _normalize_url(url: str) -> str:
     if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-    webbrowser.open(url, new=2)
+        return "https://" + url
+    return url
+
+
+def _open_url(url: str) -> bool:
+    try:
+        webbrowser.open(_normalize_url(url), new=2)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to open URL in browser: %s", exc)
+        return False
+
+
+def _show_or_open_url(url: str, options: "TaskExecutionOptions", label: str) -> None:
+    normalized = _normalize_url(url)
+    if options.browser_available and _open_url(normalized):
+        print(f"{label}: opened in browser")
+        return
+    print(f"{label}:")
+    print(normalized)
 
 
 FOLLOW_UP_GRACE_SECONDS = 1.5
@@ -56,6 +75,7 @@ class TaskExecutionOptions(BaseModel):
     completion_timeout: int = 300  # 5 minutes
     max_user_input_timeout: int = 0  # User input timeout, 0 means infinite wait
     stop_on_x_confirm: bool = False  # For CLI safe mode: stop instead of confirming action
+    browser_available: bool = False  # Opt-in: local browser can be opened safely
 
     @property
     def event_logging_enabled(self) -> bool:
@@ -676,14 +696,11 @@ class TaskRunner:
             try:
                 open_url = self._extension_url_for_x_confirm()
                 if open_url:
-                    try:
-                        _open_url(open_url)
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to open browser before x_confirm (url=%s): %s",
-                            open_url,
-                            e,
-                        )
+                    _show_or_open_url(
+                        open_url,
+                        options,
+                        "Open this URL to connect the browser extension",
+                    )
                 resp = WebSocketClient.create_x_confirm_response(request_id)
                 self.ws_client.send_message(resp)
                 self._pending_request_id = None
