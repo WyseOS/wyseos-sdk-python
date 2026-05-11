@@ -115,6 +115,17 @@ session_info = client.session.get_info(session.session_id)
 print("session_id:", session.session_id)
 ```
 
+如果需要 X API-only 执行，在 `extra` 中传入 `execution_mode`：
+
+```python
+extra = {
+    "execution_mode": "api_only",
+    "marketing_product": {"product_id": "prod_123"},
+}
+```
+
+当需要 X OAuth 授权时，SDK 默认只打印授权 URL。请在浏览器中打开该 URL 完成授权，然后回到终端按回车继续。
+
 ### A2. 运行交互式会话
 
 ```python
