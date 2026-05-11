@@ -159,9 +159,9 @@ payload = {
 
 删除 payload 中的 `session_id`、`execution_mode`、`reason_message`。
 
-- [ ] **Step 6: 让 `x_api_authorize` 走自包含 INPUT，不再先发 JSON TextMessage**
+- [ ] **Step 6: 让 `x_api_authorize` 走自包含 INPUT，同时保留人类可读描述**
 
-在 `_emit_x_api_authorize_interaction()` 中，保留 `description` 作为内部 input prompt 文本，但不通过 `send_description=True` 发送给前端。将调用改为：
+在 `_emit_x_api_authorize_interaction()` 中，`description` 继续作为普通 `TextMessage` 发出，保证旧版 SDK 或第三方客户端至少能看到“需要 X OAuth2 授权”的人类可读说明。同时通过 `input_type` / `input_data` 让新版 SDK 从随后的 INPUT 事件中读取结构化 payload。将调用改为：
 
 ```python
 async for item in self._interactive_guard.interact(
@@ -169,14 +169,14 @@ async for item in self._interactive_guard.interact(
     action_description=description,
     cancellation_token=CancellationToken(),
     data_type="x_api_authorize",
-    send_description=False,
+    send_description=True,
     input_type="x_api_authorize",
     input_data=payload,
 ):
     yield item
 ```
 
-验收标准：agent 不再为 `x_api_authorize` 额外发出一条普通 TEXT JSON 消息。
+验收标准：agent 会先发一条普通 TEXT 描述消息，供旧客户端展示；随后发出的 INPUT 事件必须自包含 `x_api_authorize` payload。新版 SDK 只消费 INPUT payload，不解析前一条 TEXT。
 
 - [ ] **Step 7: 编译检查 agent 修改文件**
 
@@ -434,7 +434,7 @@ git commit -m "feat: make sdk browser opening opt in"
         self._pending_request_id = request_id
         self._pending_input_type = InputType.TEXT
         self._pending_request_at = time.time()
-        self._pending_allow_empty_input = True
+        self._pending_empty_input_request_id = request_id
         if options.event_logging_enabled:
             self._log_event(
                 "system",
@@ -443,44 +443,29 @@ git commit -m "feat: make sdk browser opening opt in"
             )
 ```
 
-- [ ] **Step 5: 初始化和重置 `_pending_allow_empty_input`**
+- [ ] **Step 5: 用 request_id 绑定空回车放行状态**
 
 在 `TaskRunner.__init__` 中新增：
 
 ```python
-        self._pending_allow_empty_input: bool = False
+        self._pending_empty_input_request_id: Optional[str] = None
 ```
 
-在 `run_task()` 和 `run_interactive_session()` 每次重置 pending 状态的位置，紧跟 `_pending_request_at = 0.0` 后新增：
+不要在 timeout、x_confirm、plan accept 等分支中分散清理这个字段。空回车能否放行只由当前 pending request 决定：
 
 ```python
-        self._pending_allow_empty_input = False
+        self._pending_empty_input_request_id == self._pending_request_id
 ```
 
-在所有清空 `_pending_request_id` 的已有分支中同步设置：
-
-```python
-                    self._pending_allow_empty_input = False
-```
-
-需要覆盖的分支：
-
-- `stop_on_x_confirm` 分支
-- `x_confirm` 自动确认成功分支
-- 自动接受 plan 成功分支
-- interactive loop 发送用户输入成功后
-- user input timeout 后
+现有代码已经集中管理 `self._pending_request_id` 的生命周期；请求结束后 `_pending_request_id` 会被置空，因此旧的 `_pending_empty_input_request_id` 即使保留，也不会继续生效。这样避免在多个无关分支里手动撒清理逻辑。
 
 - [ ] **Step 6: 在 `_handle_input_message()` 中优先处理 x_api_authorize**
 
-在解析出 `message_data` 和 `request_id` 后、`if not request_id:` 前，加入：
+在现有 `if not request_id: ... return` 之后立即加入：
 
 ```python
         x_api_authorize_payload = self._get_x_api_authorize_payload(message)
         if x_api_authorize_payload is not None:
-            if not request_id:
-                logger.debug("ignored x_api_authorize without request_id")
-                return
             self._handle_x_api_authorize_message(
                 x_api_authorize_payload,
                 options,
@@ -504,18 +489,20 @@ git commit -m "feat: make sdk browser opening opt in"
 替换为：
 
 ```python
-                    if not user_input and not self._pending_allow_empty_input:
+                    if (
+                        not user_input
+                        and self._pending_empty_input_request_id != self._pending_request_id
+                    ):
                         print("→ Empty input ignored")
                         continue
-                    if not user_input and self._pending_allow_empty_input:
+                    if (
+                        not user_input
+                        and self._pending_empty_input_request_id == self._pending_request_id
+                    ):
                         user_input = "continue"
 ```
 
-在发送 input response 成功后的清理位置，确保包含：
-
-```python
-                    self._pending_allow_empty_input = False
-```
+不需要在发送 input response 成功后手动清理 `_pending_empty_input_request_id`；发送成功后既有代码会清空 `_pending_request_id`，request_id 绑定自然失效。
 
 - [ ] **Step 8: 编译检查 SDK**
 
@@ -729,7 +716,7 @@ payload = {
 }
 runner._handle_x_api_authorize_message(payload, TaskExecutionOptions(), "now")
 assert runner._pending_request_id == "req_1"
-assert runner._pending_allow_empty_input is True
+assert runner._pending_empty_input_request_id == "req_1"
 ```
 
 Expected: 无 assertion error；终端打印授权 URL 和恢复提示。
