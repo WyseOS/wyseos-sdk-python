@@ -65,7 +65,7 @@ connector 回调会：
 2. 通过示例让 API-only X 会话变得可发现，不增加复杂的公开抽象。
 3. 使用现有 connector OAuth 流程处理 `x_api_authorize`。
 4. 默认采用适合远程环境的 URL 输出行为。除非进程被明确标记为可使用浏览器，否则不主动打开浏览器。
-5. 确保每个 `TaskRunner` 会话的浏览器可用性状态彼此隔离，不使用模块级全局变量。
+5. 将浏览器可用性纳入现有 `TaskExecutionOptions`，保持运行时行为声明式配置。
 6. 将实现控制在协议解析、`TaskRunner` 和少量示例更新内，保持改动小而直接。
 
 ## 非目标
@@ -107,7 +107,7 @@ interactive_guard.interact(..., data_type="x_api_authorize", send_description=Tr
 
 也就是说，`external_user_id`、`external_username`、`reason_code` 等 JSON payload 并不在 `INPUT` 事件里。SDK 如果只在 `_handle_input_message()` 中解析文本 JSON，会错过前一条 `TEXT` 事件，无法可靠处理 `x_api_authorize`。
 
-本设计选择 **agent 端协议适配** 作为目标方案：`x_api_authorize` 的全量 payload 必须随 `UserInputRequestedEvent` 进入同一个 `INPUT` 事件，使 SDK 收到的 `INPUT` 事件自包含。SDK 不把“从上一条 TEXT 事件暂存 JSON”作为长期方案，因为这依赖事件顺序和隐式关联，容易在并发、重试、日志过滤或中间代理中失效。
+本设计选择 **agent 端协议适配** 作为唯一方案：`x_api_authorize` 的全量 payload 必须随 `UserInputRequestedEvent` 进入同一个 `INPUT` 事件，使 SDK 收到的 `INPUT` 事件自包含。`x_api_authorize` 是本轮新增能力，不存在需要兼容的大规模旧版本 agent，因此 SDK 不实现跨事件暂存、不读取前一条 TEXT JSON、不新增 `_pending_x_api_authorize_payload` 之类的历史兼容字段。协议一步到位修正，SDK 只实现最终正确协议。
 
 目标 `INPUT` 事件形态应为：
 
@@ -115,25 +115,16 @@ interactive_guard.interact(..., data_type="x_api_authorize", send_description=Tr
 {
   "type": "input",
   "message": {
-    "type": "x_api_authorize",
     "data": {
       "request_id": "...",
       "type": "x_api_authorize",
-      "session_id": "...",
-      "execution_mode": "api_only",
       "external_user_id": "...",
       "external_username": "...",
-      "reason_code": "...",
-      "reason_message": "..."
-    },
-    "metadata": {
-      "data_type": "x_api_authorize"
+      "reason_code": "..."
     }
   }
 }
 ```
-
-为兼容已经部署的 agent，SDK 实现可以在 `_handle_text_message()` 中增加一个很小的临时暂存兼容层：当收到 `metadata.data_type == "x_api_authorize"` 且 content 是合法 JSON 时，保存到当前 `TaskRunner` 实例的 `_pending_x_api_authorize_payload`。紧随其后的 `INPUT` 事件如果只有 `request_id` 且没有 payload，可以消费这个实例字段。该兼容层只能作为过渡路径，不能替代目标协议。
 
 ## Execution Mode
 
@@ -158,39 +149,37 @@ agent 仍然是 execution mode 校验和降级的权威来源。SDK 不重复实
 
 ## 浏览器可用性
 
-浏览器可用性必须绑定在 `TaskRunner` 实例生命周期内，不能使用模块级全局变量。
+浏览器可用性必须进入现有 `TaskExecutionOptions`，不能使用模块级全局变量，也不通过 `TaskRunner` setter 修改运行时状态。
 
-每个 `TaskRunner` 默认：
-
-```python
-self._browser_available = False
-```
-
-`TaskRunner` 可以暴露一个很小的实例方法，供明确知道本地浏览器可用的调用方使用：
+新增字段：
 
 ```python
-runner.set_browser_available(True)
+browser_available: bool = False
 ```
 
-这不是 runner option，也不应该出现在主 CLI 使用路径中。它只是给本地集成场景保留的显式 opt-in 出口。状态保存在 runner 实例上，不会污染同一进程中的其它会话、其它用户或其它 agent 调用。
+调用方如明确知道当前运行环境有本地浏览器，可以在执行时声明式传入：
+
+```python
+options = TaskExecutionOptions(browser_available=True)
+```
+
+默认 CLI 路径不需要用户理解或设置该字段。它只是给本地集成场景保留的显式 opt-in 出口。配置随本次 `run_task()` / `run_interactive_session()` 调用传入，不污染同一进程中的其它会话、其它用户或其它 agent 调用。
 
 所有面向用户的 URL 交互都应该经过同一个 helper：
 
-1. 如果 `self._browser_available` 为 false，只打印 URL 和一句简短说明。
-2. 如果 `self._browser_available` 为 true，尝试打开 URL。
+1. 如果 `options.browser_available` 为 false，只打印 URL 和一句简短说明。
+2. 如果 `options.browser_available` 为 true，尝试打开 URL。
 3. 如果打开失败，记录日志并打印 URL。
 
 这个 helper 应同时替换当前 `x_confirm` 里直接调用 `webbrowser.open()` 的行为，并用于新增的 `x_api_authorize` 路径。
 
 ## x_api_authorize 输入处理
 
-`TaskRunner._handle_input_message()` 应在普通 plan 或 text input 处理之前识别自包含的 `x_api_authorize`。
+`TaskRunner._handle_input_message()` 应在普通 plan 或 text input 处理之前识别自包含的 `x_api_authorize`。SDK 只接受一个标准入口：
 
-目标识别逻辑：
-
-1. `message.message.type == "x_api_authorize"`
-2. `message.message.metadata.data_type == "x_api_authorize"`
-3. `message.message.data.type == "x_api_authorize"`
+```python
+message.message.data.get("type") == "x_api_authorize"
+```
 
 预期 payload 位于 `message.message.data`：
 
@@ -198,16 +187,23 @@ runner.set_browser_available(True)
 {
   "request_id": "...",
   "type": "x_api_authorize",
-  "session_id": "...",
-  "execution_mode": "api_only",
   "external_user_id": "...",
   "external_username": "...",
-  "reason_code": "...",
-  "reason_message": "..."
+  "reason_code": "..."
 }
 ```
 
-如果 SDK 收到旧协议形态，也就是前一条 `TEXT` 事件里有 JSON、随后的 `INPUT` 事件只有 `request_id`，SDK 可以消费当前 runner 实例上的 `_pending_x_api_authorize_payload` 作为兼容路径。该字段必须在消费后立即清空，且不能跨 runner 共享。
+字段含义：
+
+1. `request_id`：用于保持 INPUT 事件结构一致。
+2. `type`：唯一事件识别标识。
+3. `external_user_id`：可选，目标 X 账号 ID。
+4. `external_username`：可选，目标 X handle。
+5. `reason_code`：可选，agent 触发授权的原因码，用于日志和用户提示。
+
+不包含 `session_id`。`TaskRunner` 已持有 `self.session_info.session_id`，重复传输没有价值。
+
+不包含 `execution_mode`。是否需要授权已经由 agent 决策完毕；SDK 只是调用 connector OAuth 的执行器，不根据 execution mode 做任何分支。
 
 SDK 在打印授权 URL 后不应该发送伪造的 approval response。OAuth 完成是带外流程。用户或调用方 agent 完成授权后，应通过现有会话输入机制继续下一轮任务。
 
@@ -271,7 +267,7 @@ WARNING: Agent 要求执行任务的 X 账号为 @{external_username}（external
 2. 在 event logging 开启时增加一条 execution log。
 3. 保持任务 pending，不发送成功响应。
 
-如果 `self._browser_available` 为 true 但打开 URL 失败：
+如果 `options.browser_available` 为 true 但打开 URL 失败：
 
 1. 用英语记录 warning 日志。
 2. 打印 URL。
@@ -280,16 +276,18 @@ WARNING: Agent 要求执行任务的 X 账号为 @{external_username}（external
 
 1. `octoevo/mate/task_runner.py`
    - 增加自包含 `x_api_authorize` INPUT 事件识别。
-   - 增加旧协议兼容暂存：在 TEXT 事件中捕获 `metadata.data_type == "x_api_authorize"` 的 JSON payload，供紧随其后的 INPUT 消费。
+   - 只判断 `message.message.data.get("type") == "x_api_authorize"`，不扫描 metadata 或 TEXT content。
+   - 不新增 `_pending_x_api_authorize_payload`，不做跨事件暂存。
    - 增加 handler：列出 connectors、选择 `target_connector_id`、调用 `authorize_x_account()`，并通过统一 URL helper 输出授权 URL。
    - 在未命中目标 connector 时打印强 warning。
    - 在输出授权 URL 后打印“完成授权后回车继续”的恢复提示。
    - 让 `x_confirm` 也走同一个 URL helper。
-   - 新增 runner 实例字段 `self._browser_available = False` 和实例 setter，禁止使用模块级全局状态。
+   - 在 `TaskExecutionOptions` 增加 `browser_available: bool = False`，URL helper 只读取当前 options。
 
 2. agent 端 `approval_guard.py` / `mate_helper.py` / `x_web_browser.py` 中最小必要位置
    - 让 `x_api_authorize` 的 payload 进入 `UserInputRequestedEvent` 或其 metadata/data。
    - 确保 WebSocket `INPUT` 事件自包含，不依赖前一条 TEXT 事件。
+   - payload 只保留 `request_id`、`type`、`external_user_id`、`external_username`、`reason_code`。
 
 3. `examples/getting_started/example.py` 和 quickstart 文档
    - 展示 `extra["execution_mode"] = "api_only"` 的 API-only marketing 示例。
@@ -307,10 +305,11 @@ python -m compileall octoevo/mate
 
 1. `x_confirm` 默认不再尝试打开浏览器。
 2. 新协议下，单条 `INPUT` 事件即可携带并触发 `x_api_authorize`。
-3. 旧协议下，先到达的 TEXT JSON 能被当前 runner 暂存，并被紧随其后的 INPUT 消费。
-4. `x_api_authorize` 会打印 connector OAuth URL。
-5. 输出授权 URL 后会提示用户完成授权后回车继续。
-6. 按 `external_user_id` 匹配成功时会传入 `target_connector_id`。
-7. 没有匹配账号时会传入 `target_connector_id=None`，且先打印强 warning。
-8. 多个 `TaskRunner` 实例之间的浏览器可用性状态互不影响。
-9. `extra.execution_mode` 在 WebSocket start payload 中保持原样透传。
+3. SDK 只识别 `message.message.data.type == "x_api_authorize"`。
+4. `x_api_authorize` payload 不包含 `session_id` 和 `execution_mode`。
+5. `x_api_authorize` 会打印 connector OAuth URL。
+6. 输出授权 URL 后会提示用户完成授权后回车继续。
+7. 按 `external_user_id` 匹配成功时会传入 `target_connector_id`。
+8. 没有匹配账号时会传入 `target_connector_id=None`，且先打印强 warning。
+9. `TaskExecutionOptions(browser_available=True)` 只影响当前调用。
+10. `extra.execution_mode` 在 WebSocket start payload 中保持原样透传。
