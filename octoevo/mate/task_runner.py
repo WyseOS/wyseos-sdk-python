@@ -38,11 +38,13 @@ def _normalize_url(url: str) -> str:
 
 def _open_url(url: str) -> bool:
     try:
-        webbrowser.open(_normalize_url(url), new=2)
-        return True
+        opened = webbrowser.open(_normalize_url(url), new=2)
     except Exception as exc:
         logger.warning("Failed to open URL in browser: %s", exc)
         return False
+    if not opened:
+        logger.warning("Failed to open URL in browser")
+    return opened
 
 
 def _show_or_open_url(url: str, options: "TaskExecutionOptions", label: str) -> None:
