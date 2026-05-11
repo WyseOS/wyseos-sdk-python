@@ -324,7 +324,7 @@ class XConnectorAccount(BaseModel):
     connector_id: str
     platform: Literal["x"]
     external_user_id: str
-    external_username: str
+    external_username: Optional[str] = None
     expires_at: str
     updated_at: str
     status: Literal["connected", "expired"]
