@@ -43,6 +43,9 @@ def create_client() -> Client | None:
 
 def build_extra(product_id: str) -> Dict:
     extra = {"skills": DEFAULT_MARKETING_SKILLS}
+    execution_mode = os.getenv("MATE_X_EXECUTION_MODE", "").strip()
+    if execution_mode:
+        extra["execution_mode"] = execution_mode
     if product_id:
         extra["marketing_product"] = {"product_id": product_id}
     return extra

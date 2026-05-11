@@ -116,6 +116,17 @@ session_info = client.session.get_info(session.session_id)
 print("session_id:", session.session_id)
 ```
 
+For X API-only execution, pass `execution_mode` in `extra`:
+
+```python
+extra = {
+    "execution_mode": "api_only",
+    "marketing_product": {"product_id": "prod_123"},
+}
+```
+
+When X OAuth authorization is required, the SDK prints an authorization URL by default. Open it in a browser, finish authorization, then return to the terminal and press Enter to continue.
+
 ### A2. Run Interactive Session
 
 ```python
