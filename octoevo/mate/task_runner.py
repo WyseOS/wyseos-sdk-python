@@ -123,6 +123,7 @@ class TaskRunner:
         self._pending_request_id: Optional[str] = None
         self._pending_input_type: str = InputType.TEXT
         self._pending_request_at: float = 0.0
+        self._pending_empty_input_request_id: Optional[str] = None
         self._marketing_chunk_buffers: Dict[str, Any] = {}
 
     def _wait_until_connected(self, timeout_seconds: float = CONNECT_WAIT_TIMEOUT_SECONDS) -> bool:
@@ -423,9 +424,17 @@ class TaskRunner:
                         time.sleep(3)
                         continue
 
-                    if not user_input:
+                    if (
+                        not user_input
+                        and self._pending_empty_input_request_id != self._pending_request_id
+                    ):
                         print("→ Empty input ignored")
                         continue
+                    if (
+                        not user_input
+                        and self._pending_empty_input_request_id == self._pending_request_id
+                    ):
+                        user_input = "continue"
 
                     if self._pending_input_type == InputType.PLAN:
                         resp = WebSocketClient.create_plan_acceptance_response(
@@ -643,6 +652,98 @@ class TaskRunner:
         extension_host = resolve_extension_webapp_host()
         return f"{extension_host}/agent/extension?{query}"
 
+    def _get_x_api_authorize_payload(self, message: Dict) -> Optional[Dict[str, Any]]:
+        msg_inner = message.get("message", {})
+        if isinstance(msg_inner, str):
+            return None
+        message_data = msg_inner.get("data", {})
+        if not isinstance(message_data, dict):
+            return None
+        if message_data.get("type") != "x_api_authorize":
+            return None
+        return message_data
+
+    def _find_target_x_connector_id(
+        self,
+        external_user_id: Optional[str],
+        external_username: Optional[str],
+    ) -> Optional[str]:
+        accounts = self.client.user.list_x_accounts().items
+        if external_user_id:
+            for account in accounts:
+                if account.external_user_id == external_user_id:
+                    return account.connector_id
+        if external_username:
+            normalized = external_username.lstrip("@")
+            for account in accounts:
+                if account.external_username.lstrip("@") == normalized:
+                    return account.connector_id
+        return None
+
+    def _warn_x_authorize_target_unverified(
+        self,
+        external_user_id: Optional[str],
+        external_username: Optional[str],
+    ) -> None:
+        if external_username or external_user_id:
+            handle = f"@{external_username.lstrip('@')}" if external_username else "(unknown handle)"
+            print(
+                "WARNING: Agent 要求执行任务的 X 账号为 "
+                f"{handle}（external_user_id={external_user_id or 'unknown'}）。"
+            )
+            print("请确保接下来打开的网页中登录并授权的是这个账号，否则当前任务将无法继续。")
+            return
+        print("WARNING: Agent 未提供目标 X 账号标识，请确认接下来授权的 X 账号正确。")
+
+    def _handle_x_api_authorize_message(
+        self,
+        payload: Dict[str, Any],
+        options: TaskExecutionOptions,
+        timestamp: str,
+    ) -> None:
+        request_id = payload.get("request_id")
+        external_user_id = payload.get("external_user_id")
+        external_username = payload.get("external_username")
+        reason_code = payload.get("reason_code")
+
+        target_connector_id = None
+        try:
+            target_connector_id = self._find_target_x_connector_id(
+                external_user_id=external_user_id,
+                external_username=external_username,
+            )
+        except Exception as exc:
+            logger.warning("Failed to list X connector accounts: %s", exc)
+            print("WARNING: 无法列出现有 X connector，SDK 不能校验目标账号。请确认接下来授权的 X 账号正确。")
+
+        if target_connector_id is None:
+            self._warn_x_authorize_target_unverified(external_user_id, external_username)
+
+        try:
+            resp = self.client.user.authorize_x_account(
+                target_connector_id=target_connector_id,
+            )
+        except Exception as exc:
+            logger.error("Failed to create X authorization URL: %s", exc)
+            print(f"X authorization failed: {exc}")
+            if options.event_logging_enabled:
+                self._log_event("error", f"x_api_authorize failed: {exc}", timestamp)
+            return
+
+        _show_or_open_url(resp.auth_url, options, "Open this URL to authorize X API access")
+        print("请在浏览器中完成授权后，回到此终端按回车键（或输入任意内容）以继续当前任务。")
+
+        self._pending_request_id = request_id
+        self._pending_input_type = InputType.TEXT
+        self._pending_request_at = time.time()
+        self._pending_empty_input_request_id = request_id
+        if options.event_logging_enabled:
+            self._log_event(
+                "system",
+                f"x_api_authorize url issued reason={reason_code or 'unknown'} target_connector_id={target_connector_id or 'new'}",
+                timestamp,
+            )
+
     def _handle_input_message(
         self, message: Dict, options: TaskExecutionOptions, timestamp: str
     ):
@@ -665,6 +766,14 @@ class TaskRunner:
             logger.debug(
                 "ignored input message without request_id (inner_type=%s)",
                 inner_type,
+            )
+            return
+        x_api_authorize_payload = self._get_x_api_authorize_payload(message)
+        if x_api_authorize_payload is not None:
+            self._handle_x_api_authorize_message(
+                x_api_authorize_payload,
+                options,
+                timestamp,
             )
             return
         if options.verbose:
