@@ -1,38 +1,38 @@
-# X Capability E2E Examples Design
+# X Capability E2E Examples 设计
 
-## Background
+## 背景
 
-The XAgent capability decision document defines a three-dimensional problem space:
+XAgent 能力决策文档定义了一个三维问题空间：
 
-- 2 runtime environments: local and remote
-- 2 execution capabilities: browser extension and X API
-- 4 marketing task types: reply, publish, interact, and direct message
+- 2 大运行环境：本地环境和远程环境
+- 2 层执行能力：浏览器插件和 X API
+- 4 类营销任务：回复、发布、互动和私信
 
-The SDK currently has a minimal marketing example in `examples/getting_started`, but it does not provide a complete Live E2E runner for validating all capability decision paths. The new example project will be a small, focused client that creates real sessions, connects over WebSocket, runs the Agent, and verifies the expected result for every matrix scenario.
+SDK 当前在 `examples/getting_started` 中只有一个最小营销示例，但没有提供一个完整的 Live E2E runner 来验证所有能力决策路径。新的 example 项目将是一个小而聚焦的客户端：它会创建真实 session，通过 WebSocket 连接，运行 Agent，并验证矩阵中每个场景的预期结果。
 
-This is not a unit test project and not a dry-run simulator. It is a real E2E validation client.
+这不是单元测试项目，也不是 dry-run 模拟器。它是一个真实的 E2E 验证客户端。
 
-## Goals
+## 目标
 
-- Add a new example project under `examples/x_capability_e2e/`.
-- Cover all 16 combinations of environment, execution capability, and marketing task type.
-- Run real marketing sessions through the existing SDK and Agent flow.
-- Allow real X write actions, including publish, interact, and direct message.
-- Verify negative paths by creating real sessions and checking the Agent's rejection or failure reason.
-- Reuse existing SDK configuration and session runner patterns from `examples/getting_started`.
-- Keep the project small, explicit, and easy to read.
+- 在 `examples/x_capability_e2e/` 下新增一个 example 项目。
+- 覆盖环境、执行能力、营销任务类型三者组合形成的全部 16 个场景。
+- 通过现有 SDK 和 Agent 流程运行真实 marketing session。
+- 允许真实 X 写操作，包括发布、互动和私信。
+- 负向路径也必须创建真实 session，并检查 Agent 的拒绝或失败原因。
+- 复用 `examples/getting_started` 中已有的 SDK 配置和 session runner 模式。
+- 保持项目小、显式、易读。
 
-## Non-Goals
+## 非目标
 
-- Do not build a general test framework.
-- Do not add pytest or another test runner.
-- Do not add a dry-run mode.
-- Do not add a write-safety gate such as `allow_write`.
-- Do not introduce new SDK or Agent protocol fields.
-- Do not implement environment auto-detection.
-- Do not run scenarios in parallel.
+- 不构建通用测试框架。
+- 不引入 pytest 或其他测试 runner。
+- 不增加 dry-run 模式。
+- 不增加 `allow_write` 之类的写操作安全门。
+- 不引入新的 SDK 或 Agent 协议字段。
+- 不实现运行环境自动检测。
+- 不并发运行场景。
 
-## Project Layout
+## 项目结构
 
 ```text
 examples/x_capability_e2e/
@@ -47,19 +47,19 @@ examples/x_capability_e2e/
     └── .gitkeep
 ```
 
-Responsibilities:
+职责划分：
 
-- `main.py`: CLI entry point, scenario filtering, sequential execution, summary output.
-- `config.py`: load `mate.yaml` and E2E environment variables.
-- `scenarios.py`: define the fixed 16 scenarios and their expected outcomes.
-- `runner.py`: create sessions, connect WebSocket, run `TaskRunner.run_interactive_session()`, and collect output.
-- `assertions.py`: classify captured output as pass, fail, timeout, or error.
-- `README.md`: explain setup and warn that this runner performs real X actions.
-- `results/latest.json`: generated at runtime and not committed.
+- `main.py`：CLI 入口、场景筛选、顺序执行、汇总输出。
+- `config.py`：加载 `mate.yaml` 和 E2E 环境变量。
+- `scenarios.py`：定义固定的 16 个场景及其预期结果。
+- `runner.py`：创建 session，连接 WebSocket，运行 `TaskRunner.run_interactive_session()`，并收集输出。
+- `assertions.py`：将捕获到的输出分类为 pass、fail、timeout 或 error。
+- `README.md`：说明配置方式，并明确提示该 runner 会执行真实 X 操作。
+- `results/latest.json`：运行时生成，不提交。
 
-## Configuration
+## 配置
 
-The example will use `mate.yaml`, matching `examples/getting_started`:
+该 example 使用 `mate.yaml`，与 `examples/getting_started` 保持一致：
 
 ```yaml
 mate:
@@ -69,19 +69,19 @@ mate:
   timeout: 30
 ```
 
-Additional E2E inputs come from environment variables:
+额外 E2E 输入来自环境变量：
 
-- `MATE_E2E_PRODUCT_ID`: optional marketing product ID.
-- `MATE_E2E_TARGET_TWEET_URL`: tweet URL used by reply and interact scenarios.
-- `MATE_E2E_TARGET_X_USER`: X username used by direct-message scenarios.
-- `MATE_E2E_PUBLISH_TEXT_PREFIX`: optional prefix for publish scenarios.
-- `MATE_E2E_TIMEOUT_SECONDS`: per-scenario timeout, default `900`.
+- `MATE_E2E_PRODUCT_ID`：可选的 marketing product ID。
+- `MATE_E2E_TARGET_TWEET_URL`：回复和互动场景使用的 tweet URL。
+- `MATE_E2E_TARGET_X_USER`：私信场景使用的 X username。
+- `MATE_E2E_PUBLISH_TEXT_PREFIX`：发布场景使用的可选前缀。
+- `MATE_E2E_TIMEOUT_SECONDS`：单场景超时时间，默认 `900`。
 
-The runner will not include an `allow_write` option. Running it means the user accepts real X write operations.
+Runner 不包含 `allow_write` 选项。运行该项目即表示用户接受真实 X 写操作。
 
 ## CLI
 
-Supported commands:
+支持的命令：
 
 ```bash
 python main.py --all
@@ -91,11 +91,11 @@ python main.py --capability api
 python main.py --task-type dm
 ```
 
-Filtering is simple AND filtering. For example, `--environment remote --capability api` runs only remote API scenarios.
+筛选逻辑是简单的 AND 过滤。例如，`--environment remote --capability api` 只运行远程 API 场景。
 
-## Scenario Model
+## 场景模型
 
-Each scenario is an explicit data object, not a dynamically generated DSL:
+每个场景都是显式的数据对象，不是动态生成的 DSL：
 
 ```python
 Scenario(
@@ -110,51 +110,51 @@ Scenario(
 )
 ```
 
-Field meanings:
+字段含义：
 
-- `environment`: `local` or `remote`.
-- `capability`: `extension` or `api`.
-- `task_type`: `reply`, `publish`, `interact`, or `dm`.
-- `execution_mode`: sent in `extra.execution_mode`.
-- `browser_available`: passed to `TaskExecutionOptions`.
-- `expected`: `success` or `failure`.
-- `expected_path`: expected execution path when relevant.
+- `environment`：`local` 或 `remote`。
+- `capability`：`extension` 或 `api`。
+- `task_type`：`reply`、`publish`、`interact` 或 `dm`。
+- `execution_mode`：发送到 `extra.execution_mode`。
+- `browser_available`：传给 `TaskExecutionOptions`。
+- `expected`：`success` 或 `failure`。
+- `expected_path`：相关场景的预期执行路径。
 
-Capability mapping:
+能力映射：
 
-- `capability=api` maps to `extra.execution_mode="api_only"`.
-- `capability=extension` maps to `extra.execution_mode="extension_only"`.
-- `environment=local` maps to `TaskExecutionOptions(browser_available=True)`.
-- `environment=remote` maps to `TaskExecutionOptions(browser_available=False)`.
+- `capability=api` 映射为 `extra.execution_mode="api_only"`。
+- `capability=extension` 映射为 `extra.execution_mode="extension_only"`。
+- `environment=local` 映射为 `TaskExecutionOptions(browser_available=True)`。
+- `environment=remote` 映射为 `TaskExecutionOptions(browser_available=False)`。
 
-This uses existing SDK and Agent behavior without adding protocol fields.
+这会复用现有 SDK 和 Agent 行为，不新增协议字段。
 
-## Scenario Matrix
+## 场景矩阵
 
 | Scenario | Expected | Reason |
 | --- | --- | --- |
-| `local-extension-reply` | success | Browser extension supports replies |
-| `local-extension-publish` | success | Extension can publish, although API is more reliable |
-| `local-extension-interact` | success | Extension supports full interaction |
-| `local-extension-dm` | failure | Extension does not support direct messages |
-| `local-api-reply` | failure | X API does not support replies |
-| `local-api-publish` | success | X API supports publishing |
-| `local-api-interact` | success | X API supports limited interaction |
-| `local-api-dm` | success | X API supports direct messages |
-| `remote-extension-reply` | failure | Remote environment has no browser extension |
-| `remote-extension-publish` | failure | Remote environment has no browser extension |
-| `remote-extension-interact` | failure | Remote environment has no browser extension |
-| `remote-extension-dm` | failure | Remote environment has no browser extension and extension cannot DM |
-| `remote-api-reply` | failure | X API does not support replies |
-| `remote-api-publish` | success | X API is the only remote publish path |
-| `remote-api-interact` | success | X API is the only remote interaction path, with limits |
-| `remote-api-dm` | success | X API is the only remote DM path |
+| `local-extension-reply` | success | 浏览器插件支持回复 |
+| `local-extension-publish` | success | 插件可以发布，虽然 API 更可靠 |
+| `local-extension-interact` | success | 插件完整支持互动 |
+| `local-extension-dm` | failure | 插件不支持私信 |
+| `local-api-reply` | failure | X API 不支持回复 |
+| `local-api-publish` | success | X API 支持发布 |
+| `local-api-interact` | success | X API 支持受限互动 |
+| `local-api-dm` | success | X API 支持私信 |
+| `remote-extension-reply` | failure | 远程环境没有浏览器插件 |
+| `remote-extension-publish` | failure | 远程环境没有浏览器插件 |
+| `remote-extension-interact` | failure | 远程环境没有浏览器插件 |
+| `remote-extension-dm` | failure | 远程环境没有浏览器插件，且插件不能私信 |
+| `remote-api-reply` | failure | X API 不支持回复 |
+| `remote-api-publish` | success | X API 是远程发布的唯一路径 |
+| `remote-api-interact` | success | X API 是远程互动的唯一路径，但能力受限 |
+| `remote-api-dm` | success | X API 是远程私信的唯一路径 |
 
-Negative scenarios must still create real sessions and wait for the Agent to return a failure or rejection reason.
+负向场景仍然必须创建真实 session，并等待 Agent 返回失败或拒绝原因。
 
-## Task Prompts
+## 任务提示词
 
-Each scenario uses a fixed prompt template. A per-scenario run ID is included so real X actions are traceable:
+每个场景使用固定提示词模板。每个场景都会包含一个 run ID，便于追踪真实 X 操作：
 
 ```text
 Run ID: 20260512-153000-local-api-publish
@@ -164,54 +164,54 @@ The tweet must include this exact run id: 20260512-153000-local-api-publish.
 Do not ask for additional confirmation unless the system requires authorization.
 ```
 
-Task types:
+任务类型：
 
-- `reply`: reply to `MATE_E2E_TARGET_TWEET_URL`.
-- `publish`: publish a short test tweet containing the run ID.
-- `interact`: interact with `MATE_E2E_TARGET_TWEET_URL`, such as like or retweet.
-- `dm`: send a direct message to `MATE_E2E_TARGET_X_USER` containing the run ID.
+- `reply`：回复 `MATE_E2E_TARGET_TWEET_URL`。
+- `publish`：发布一条包含 run ID 的短测试 tweet。
+- `interact`：与 `MATE_E2E_TARGET_TWEET_URL` 互动，例如 like 或 retweet。
+- `dm`：向 `MATE_E2E_TARGET_X_USER` 发送一条包含 run ID 的私信。
 
-Prompts should be direct and deterministic. They should not ask the model to choose the task type.
+提示词应直接、确定，不让模型自行选择任务类型。
 
-## Execution Flow
+## 执行流程
 
-For each selected scenario:
+对每个被选中的场景：
 
-1. Build the task prompt.
-2. Build `extra` with default marketing skills and `execution_mode`.
-3. Include `marketing_product.product_id` when `MATE_E2E_PRODUCT_ID` is set.
-4. Create a marketing session with `CreateSessionRequest`.
-5. Fetch `session_info`.
-6. Create `WebSocketClient`.
-7. Create `TaskRunner`.
-8. Run `run_interactive_session()` with `TaskExecutionOptions`.
-9. Capture stdout and stderr while also writing to the terminal.
-10. Classify the captured output.
-11. Store the result and continue to the next scenario.
+1. 构造任务提示词。
+2. 构造包含默认 marketing skills 和 `execution_mode` 的 `extra`。
+3. 当设置了 `MATE_E2E_PRODUCT_ID` 时，写入 `marketing_product.product_id`。
+4. 使用 `CreateSessionRequest` 创建 marketing session。
+5. 获取 `session_info`。
+6. 创建 `WebSocketClient`。
+7. 创建 `TaskRunner`。
+8. 使用 `TaskExecutionOptions` 运行 `run_interactive_session()`。
+9. 捕获 stdout 和 stderr，同时继续输出到终端。
+10. 对捕获到的输出进行分类。
+11. 存储结果并继续下一个场景。
 
-Scenarios run sequentially. This keeps real X account state and OAuth interactions easier to reason about.
+场景顺序执行。这样真实 X 账号状态和 OAuth 交互更容易理解和排查。
 
-## Authorization Handling
+## 授权处理
 
-If the Agent emits `x_api_authorize`, the SDK prints an authorization URL and waits for user input. The E2E runner will not poll authorization status or fake completion.
+如果 Agent 发出 `x_api_authorize`，SDK 会打印授权 URL 并等待用户输入。E2E runner 不轮询授权状态，也不伪造完成信号。
 
-Expected operator flow:
+预期操作流程：
 
-1. The runner prints the authorization URL.
-2. The user opens the URL and completes OAuth.
-3. The user returns to the terminal and presses Enter.
-4. The current scenario continues.
+1. Runner 打印授权 URL。
+2. 用户打开 URL 并完成 OAuth。
+3. 用户回到终端并按 Enter。
+4. 当前场景继续运行。
 
-This verifies the real SDK authorization recovery path.
+这会验证真实的 SDK 授权恢复路径。
 
-## Output Capture
+## 输出捕获
 
-The runner will capture both stdout and stderr with a small `Tee` helper:
+Runner 使用一个很小的 `Tee` helper 捕获 stdout 和 stderr：
 
-- write all output to the terminal
-- keep the same output in memory for assertions
+- 将所有输出写到终端。
+- 将同一份输出保存在内存中用于断言。
 
-Each scenario result records:
+每个场景结果记录：
 
 - `scenario_id`
 - `session_id`
@@ -228,11 +228,11 @@ Each scenario result records:
 - `duration_seconds`
 - `exception`
 
-## Assertions
+## 断言
 
-Assertions are marker-based and deliberately simple.
+断言基于 marker，且刻意保持简单。
 
-Success markers:
+成功 marker：
 
 ```python
 SUCCESS_MARKERS = [
@@ -242,7 +242,7 @@ SUCCESS_MARKERS = [
 ]
 ```
 
-Authorization markers:
+授权 marker：
 
 ```python
 AUTH_MARKERS = [
@@ -251,7 +251,7 @@ AUTH_MARKERS = [
 ]
 ```
 
-Failure reason markers:
+失败原因 marker：
 
 ```python
 FAILURE_REASON_MARKERS = {
@@ -261,26 +261,26 @@ FAILURE_REASON_MARKERS = {
 }
 ```
 
-Pass rules:
+通过规则：
 
-- Expected success passes when there is no exception, no timeout, no matched rejection reason, and a completion marker appears.
-- Expected failure passes when the output includes the expected rejection reason or the final answer clearly states that the requested path is unavailable.
-- Authorization output is not a failure by itself. The scenario continues after the user completes OAuth and presses Enter.
+- 预期成功：没有 exception，没有超时，没有匹配到拒绝原因，并且出现完成 marker。
+- 预期失败：输出中包含预期拒绝原因，或 final answer 明确说明请求路径不可用。
+- 授权输出本身不是失败。用户完成 OAuth 并按 Enter 后，场景继续运行。
 
-The runner will not call a model to judge output.
+Runner 不调用模型来判断输出。
 
-## Error Handling
+## 错误处理
 
-- A single scenario exception records `ERROR` and does not stop the full run.
-- Timeout records `TIMEOUT`.
-- Assertion mismatch records `FAIL`.
-- `KeyboardInterrupt` stops the run and writes partial results.
-- Any non-pass status causes process exit code `1`.
-- All pass statuses cause process exit code `0`.
+- 单个场景异常记录为 `ERROR`，不停止完整运行。
+- 超时记录为 `TIMEOUT`。
+- 断言不匹配记录为 `FAIL`。
+- `KeyboardInterrupt` 停止运行，并写入部分结果。
+- 任意非 pass 状态会让进程退出码为 `1`。
+- 全部 pass 时进程退出码为 `0`。
 
-## Console Output
+## 控制台输出
 
-Example summary:
+汇总示例：
 
 ```text
 X Capability E2E Summary
@@ -291,9 +291,9 @@ FAIL  remote-api-publish        expected=success  actual=timeout
 ERROR local-api-dm              APIError: ...
 ```
 
-## JSON Output
+## JSON 输出
 
-Runtime output is written to `examples/x_capability_e2e/results/latest.json`:
+运行结果写入 `examples/x_capability_e2e/results/latest.json`：
 
 ```json
 {
@@ -321,4 +321,4 @@ Runtime output is written to `examples/x_capability_e2e/results/latest.json`:
 
 ## Review Notes
 
-This design intentionally favors explicit data and simple control flow over extensibility. The scenario set is fixed because the source document defines a fixed 16-path matrix. Future capabilities should update this example only when the source decision matrix changes.
+该设计刻意选择显式数据和简单控制流，而不是可扩展性。场景集合是固定的，因为源决策文档定义的是固定的 16 路径矩阵。未来只有当源决策矩阵变化时，才应更新这个 example。
