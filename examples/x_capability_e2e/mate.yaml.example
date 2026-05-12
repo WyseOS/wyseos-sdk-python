@@ -1,0 +1,5 @@
+mate:
+  api_key: ""
+  # jwt_token: ""
+  base_url: "https://api.dev.weclaw.ai"
+  timeout: 30
