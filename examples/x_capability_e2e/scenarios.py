@@ -7,7 +7,7 @@ from typing import Iterable, Literal, Optional
 
 Environment = Literal["local", "remote"]
 Capability = Literal["extension", "api"]
-TaskType = Literal["reply", "publish", "interact", "dm"]
+TaskType = Literal["reply", "publish", "interact"]
 Expected = Literal["success", "failure"]
 
 
@@ -25,19 +25,15 @@ SCENARIOS = [
     Scenario("local-extension-reply", "local", "extension", "reply", "success"),
     Scenario("local-extension-publish", "local", "extension", "publish", "success"),
     Scenario("local-extension-interact", "local", "extension", "interact", "success"),
-    Scenario("local-extension-dm", "local", "extension", "dm", "failure", "extension_dm_unsupported"),
-    Scenario("local-api-reply", "local", "api", "reply", "failure", "api_reply_unsupported"),
+    Scenario("local-api-reply", "local", "api", "reply", "failure", "REPLY_API_UNSUPPORTED"),
     Scenario("local-api-publish", "local", "api", "publish", "success"),
     Scenario("local-api-interact", "local", "api", "interact", "success"),
-    Scenario("local-api-dm", "local", "api", "dm", "success"),
-    Scenario("remote-extension-reply", "remote", "extension", "reply", "failure", "extension_unavailable"),
-    Scenario("remote-extension-publish", "remote", "extension", "publish", "failure", "extension_unavailable"),
-    Scenario("remote-extension-interact", "remote", "extension", "interact", "failure", "extension_unavailable"),
-    Scenario("remote-extension-dm", "remote", "extension", "dm", "failure", "extension_unavailable"),
-    Scenario("remote-api-reply", "remote", "api", "reply", "failure", "api_reply_unsupported"),
+    Scenario("remote-extension-reply", "remote", "extension", "reply", "failure", "EXTENSION_REQUIRED"),
+    Scenario("remote-extension-publish", "remote", "extension", "publish", "failure", "EXTENSION_REQUIRED"),
+    Scenario("remote-extension-interact", "remote", "extension", "interact", "failure", "EXTENSION_REQUIRED"),
+    Scenario("remote-api-reply", "remote", "api", "reply", "failure", "REPLY_API_UNSUPPORTED"),
     Scenario("remote-api-publish", "remote", "api", "publish", "success"),
     Scenario("remote-api-interact", "remote", "api", "interact", "success"),
-    Scenario("remote-api-dm", "remote", "api", "dm", "success"),
 ]
 
 
@@ -85,7 +81,6 @@ def build_task_prompt(
     nonce: str,
     publish_text_prefix: str,
     target_tweet_url: Optional[str],
-    target_x_user: Optional[str],
 ) -> str:
     marker = f"{run_id} {nonce}"
     header = (
@@ -107,20 +102,10 @@ def build_task_prompt(
             "Use the configured X account to publish one short test tweet.\n"
             f"The tweet text must include: {publish_text_prefix} {marker}."
         )
-    if scenario.task_type == "interact":
-        if not target_tweet_url:
-            raise ValueError("MATE_E2E_TARGET_TWEET_URL is required for interact scenarios")
-        return (
-            f"{header}\n"
-            f"Use the configured X account to interact with this tweet: {target_tweet_url}\n"
-            "Perform one available interaction such as like or retweet."
-        )
-    if scenario.task_type == "dm":
-        if not target_x_user:
-            raise ValueError("MATE_E2E_TARGET_X_USER is required for dm scenarios")
-        return (
-            f"{header}\n"
-            f"Use the configured X account to send a direct message to @{target_x_user.lstrip('@')}.\n"
-            f"The message must include this exact run id and nonce: {marker}."
-        )
-    raise ValueError(f"Unsupported task type: {scenario.task_type}")
+    if not target_tweet_url:
+        raise ValueError("MATE_E2E_TARGET_TWEET_URL is required for interact scenarios")
+    return (
+        f"{header}\n"
+        f"Use the configured X account to interact with this tweet: {target_tweet_url}\n"
+        "Perform one available interaction such as like or retweet."
+    )
