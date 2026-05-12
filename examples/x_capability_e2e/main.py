@@ -7,10 +7,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from scenarios import default_run_prefix, filter_scenarios
+from scenarios import default_run_prefix, filter_scenarios  # type: ignore
 
 if TYPE_CHECKING:
-    from runner import ScenarioRunResult
+    from runner import ScenarioRunResult  # type: ignore
 
 
 STATUSES = ("PASS", "FAIL", "ERROR", "TIMEOUT")
@@ -30,7 +30,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--scenario", help="Run one scenario by id.")
     parser.add_argument("--environment", choices=("local", "remote"))
     parser.add_argument("--capability", choices=("extension", "api"))
-    parser.add_argument("--task-type", choices=("reply", "publish", "interact", "dm"))
+    parser.add_argument("--task-type", choices=("reply", "publish", "interact"))
     return parser.parse_args()
 
 
@@ -94,8 +94,8 @@ def main() -> int:
         print("No scenarios matched.", file=sys.stderr)
         return 2
 
-    from config import load_e2e_config
-    from runner import run_scenario
+    from config import load_e2e_config  # type: ignore
+    from runner import run_scenario  # type: ignore
 
     config = load_e2e_config(base_dir)
     result_dir = config.result_dir

@@ -6,14 +6,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from octoevo.mate import create_task_runner
-from octoevo.mate.models import CreateSessionRequest
-from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode, TaskResult
-from octoevo.mate.websocket import WebSocketClient
-
-from assertions import AssertionResult, classify_result
-from config import E2EConfig
-from scenarios import (
+from assertions import AssertionResult, classify_result  # type: ignore
+from config import E2EConfig  # type: ignore
+from scenarios import (  # type: ignore
     Scenario,
     browser_available_for,
     build_task_prompt,
@@ -22,6 +17,10 @@ from scenarios import (
     make_run_id,
 )
 
+from octoevo.mate import create_task_runner
+from octoevo.mate.models import CreateSessionRequest
+from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode, TaskResult
+from octoevo.mate.websocket import WebSocketClient
 
 DEFAULT_MARKETING_SKILLS = [
     {
@@ -128,7 +127,6 @@ def run_scenario(
             nonce=nonce,
             publish_text_prefix=config.publish_text_prefix,
             target_tweet_url=config.target_tweet_url,
-            target_x_user=config.target_x_user,
         )
         extra = _build_extra(config, execution_mode)
         req = CreateSessionRequest(
