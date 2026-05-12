@@ -52,8 +52,8 @@ examples/x_capability_e2e/
 - `main.py`：CLI 入口、场景筛选、顺序执行、汇总输出。
 - `config.py`：加载 `mate.yaml` 和 E2E 环境变量。
 - `scenarios.py`：定义固定的 16 个场景及其预期结果。
-- `runner.py`：创建 session，连接 WebSocket，运行 `TaskRunner.run_interactive_session()`，并收集输出。
-- `assertions.py`：将捕获到的输出分类为 pass、fail、timeout 或 error。
+- `runner.py`：创建 session，连接 WebSocket，运行 `TaskRunner.run_task()`，并收集 `TaskResult`。
+- `assertions.py`：基于 `TaskResult` 的结构化字段分类为 pass、fail、timeout 或 error。
 - `README.md`：说明配置方式，并明确提示该 runner 会执行真实 X 操作。
 - `results/latest.json`：运行时生成，不提交。
 
@@ -76,8 +76,11 @@ mate:
 - `MATE_E2E_TARGET_X_USER`：私信场景使用的 X username。
 - `MATE_E2E_PUBLISH_TEXT_PREFIX`：发布场景使用的可选前缀。
 - `MATE_E2E_TIMEOUT_SECONDS`：单场景超时时间，默认 `900`。
+- `MATE_E2E_USER_INPUT_TIMEOUT_SECONDS`：意外输入请求的等待时间，默认 `120`。
 
 Runner 不包含 `allow_write` 选项。运行该项目即表示用户接受真实 X 写操作。
+
+`MATE_E2E_TIMEOUT_SECONDS` 必须同时注入到 `TaskExecutionOptions.completion_timeout` 和外层场景超时控制中。SDK 默认 `completion_timeout` 是 300 秒，如果不显式覆盖，外层 900 秒配置会失效。
 
 ## CLI
 
@@ -103,10 +106,7 @@ Scenario(
     environment="local",
     capability="api",
     task_type="publish",
-    execution_mode="api_only",
-    browser_available=True,
     expected="success",
-    expected_path="api",
 )
 ```
 
@@ -115,10 +115,7 @@ Scenario(
 - `environment`：`local` 或 `remote`。
 - `capability`：`extension` 或 `api`。
 - `task_type`：`reply`、`publish`、`interact` 或 `dm`。
-- `execution_mode`：发送到 `extra.execution_mode`。
-- `browser_available`：传给 `TaskExecutionOptions`。
 - `expected`：`success` 或 `failure`。
-- `expected_path`：相关场景的预期执行路径。
 
 能力映射：
 
@@ -128,6 +125,14 @@ Scenario(
 - `environment=remote` 映射为 `TaskExecutionOptions(browser_available=False)`。
 
 这会复用现有 SDK 和 Agent 行为，不新增协议字段。
+
+`Scenario` 不保存 `execution_mode`、`browser_available` 或 `expected_path`：
+
+- `execution_mode` 可由 `capability` 唯一推导。
+- `browser_available` 可由 `environment` 唯一推导。
+- 当前断言不消费 `expected_path`，因此不保留该字段。
+
+场景模型只保留源矩阵中的核心变量，避免同一事实被重复声明。
 
 ## 场景矩阵
 
@@ -154,13 +159,14 @@ Scenario(
 
 ## 任务提示词
 
-每个场景使用固定提示词模板。每个场景都会包含一个 run ID，便于追踪真实 X 操作：
+每个场景使用固定提示词模板。每个场景都会包含一个 run ID 和随机后缀，便于追踪真实 X 操作，同时降低 X 平台重复内容或高频相似内容触发风控的概率：
 
 ```text
 Run ID: 20260512-153000-local-api-publish
+Nonce: k7p9q2
 
 Use the configured X account to publish one short test tweet.
-The tweet must include this exact run id: 20260512-153000-local-api-publish.
+The tweet must include this exact run id and nonce: 20260512-153000-local-api-publish k7p9q2.
 Do not ask for additional confirmation unless the system requires authorization.
 ```
 
@@ -173,6 +179,14 @@ Do not ask for additional confirmation unless the system requires authorization.
 
 提示词应直接、确定，不让模型自行选择任务类型。
 
+为降低真实 X 写操作导致的误报：
+
+- 每个场景生成不同 nonce，并写入发布、回复、私信正文。
+- 发布文本包含 `MATE_E2E_PUBLISH_TEXT_PREFIX`、run ID、nonce 和简短随机短语。
+- 同一轮矩阵中不复用完全相同的写入文本。
+- 针对 X API rate limit、重复内容、spam detection 等明确平台拒绝，runner 将记录为 `ERROR`，不把它误判为能力矩阵失败。
+- Runner 不做复杂重试；最多只允许对短暂网络错误做一次立即重试。真实平台风控拒绝不重试。
+
 ## 执行流程
 
 对每个被选中的场景：
@@ -184,32 +198,49 @@ Do not ask for additional confirmation unless the system requires authorization.
 5. 获取 `session_info`。
 6. 创建 `WebSocketClient`。
 7. 创建 `TaskRunner`。
-8. 使用 `TaskExecutionOptions` 运行 `run_interactive_session()`。
-9. 捕获 stdout 和 stderr，同时继续输出到终端。
-10. 对捕获到的输出进行分类。
+8. 使用 `TaskExecutionOptions` 运行 `run_task()`。
+9. 从返回的 `TaskResult` 读取 `success`、`final_answer`、`error`、`execution_logs`、`session_duration` 和 `message_count`。
+10. 对 `TaskResult` 进行分类。
 11. 存储结果并继续下一个场景。
 
 场景顺序执行。这样真实 X 账号状态和 OAuth 交互更容易理解和排查。
 
+`TaskExecutionOptions` 必须显式设置：
+
+```python
+TaskExecutionOptions(
+    verbose=False,
+    auto_accept_plan=True,
+    browser_available=derive_browser_available(scenario.environment),
+    completion_timeout=config.timeout_seconds,
+    max_user_input_timeout=config.user_input_timeout_seconds,
+    enable_event_logging=True,
+)
+```
+
+其中：
+
+- `config.timeout_seconds` 来自 `MATE_E2E_TIMEOUT_SECONDS`。
+- `config.user_input_timeout_seconds` 来自 `MATE_E2E_USER_INPUT_TIMEOUT_SECONDS`。
+
+`max_user_input_timeout` 必须是有限值，避免无人值守环境中因为授权或意外输入请求永久挂死。
+
 ## 授权处理
 
-如果 Agent 发出 `x_api_authorize`，SDK 会打印授权 URL 并等待用户输入。E2E runner 不轮询授权状态，也不伪造完成信号。
+Live E2E runner 使用 `run_task()`，不使用 `run_interactive_session()`。原因是 `run_interactive_session()` 内部依赖 Python 原生 `input()`，在 CI/CD 或无人值守环境中遇到授权或意外输入请求时会永久阻塞。
 
-预期操作流程：
+授权策略：
 
-1. Runner 打印授权 URL。
-2. 用户打开 URL 并完成 OAuth。
-3. 用户回到终端并按 Enter。
-4. 当前场景继续运行。
+- E2E 前置条件是 API 场景所需的 X connector 已完成授权。
+- 如果运行中仍触发 `x_api_authorize` 或其他输入请求，runner 不进入阻塞式人工交互。
+- `TaskExecutionOptions.max_user_input_timeout` 必须设置为有限值，使该场景按 `ERROR` 或 `TIMEOUT` 结束。
+- 该结果说明 E2E 环境未预授权，不是能力矩阵本身失败。
 
-这会验证真实的 SDK 授权恢复路径。
+需要人工验证 OAuth 恢复链路时，应单独运行 `examples/getting_started` 或另建手动授权检查，而不是混入这个自动化 E2E runner。
 
-## 输出捕获
+## 结果采集
 
-Runner 使用一个很小的 `Tee` helper 捕获 stdout 和 stderr：
-
-- 将所有输出写到终端。
-- 将同一份输出保存在内存中用于断言。
+Runner 不重定向 stdout/stderr，也不通过控制台文案做黑盒断言。执行证据来自 `TaskRunner.run_task()` 返回的 `TaskResult`：
 
 每个场景结果记录：
 
@@ -223,6 +254,10 @@ Runner 使用一个很小的 `Tee` helper 捕获 stdout 和 stderr：
 - `expected`
 - `status`
 - `matched_reason`
+- `task_success`
+- `task_error`
+- `final_answer`
+- `message_count`
 - `started_at`
 - `ended_at`
 - `duration_seconds`
@@ -230,26 +265,7 @@ Runner 使用一个很小的 `Tee` helper 捕获 stdout 和 stderr：
 
 ## 断言
 
-断言基于 marker，且刻意保持简单。
-
-成功 marker：
-
-```python
-SUCCESS_MARKERS = [
-    "Task completed",
-    "final answer",
-    "session completed",
-]
-```
-
-授权 marker：
-
-```python
-AUTH_MARKERS = [
-    "Open this URL to authorize X API access",
-    "x_api_authorize",
-]
-```
+断言基于 `TaskResult`，不依赖 stdout/stderr 文案。
 
 失败原因 marker：
 
@@ -263,9 +279,10 @@ FAILURE_REASON_MARKERS = {
 
 通过规则：
 
-- 预期成功：没有 exception，没有超时，没有匹配到拒绝原因，并且出现完成 marker。
-- 预期失败：输出中包含预期拒绝原因，或 final answer 明确说明请求路径不可用。
-- 授权输出本身不是失败。用户完成 OAuth 并按 Enter 后，场景继续运行。
+- 预期成功：`TaskResult.success is True`，`TaskResult.error is None`，且 `final_answer` 中没有匹配到拒绝原因。
+- 预期失败：`final_answer` / `error` 中必须包含该场景对应的预期拒绝原因。单纯的 `TaskResult.success is False` 不足以通过，因为网络错误、平台风控和授权缺失也可能导致 `success=False`。
+- 授权缺失：`error` 或 `execution_logs` 中出现 `x_api_authorize`、`authorization`、`connector` 等授权相关证据时，记录为 `ERROR`，提示先完成 X connector 预授权。
+- 平台风控：`error` 或 `final_answer` 中出现 rate limit、duplicate、spam、policy 等 X 平台拒绝证据时，记录为 `ERROR`，避免误判为 Agent 能力决策错误。
 
 Runner 不调用模型来判断输出。
 
@@ -313,6 +330,9 @@ ERROR local-api-dm              APIError: ...
       "expected": "success",
       "status": "PASS",
       "matched_reason": null,
+      "task_success": true,
+      "task_error": null,
+      "message_count": 42,
       "duration_seconds": 123.4
     }
   ]
