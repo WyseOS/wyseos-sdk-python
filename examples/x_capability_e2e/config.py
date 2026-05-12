@@ -18,7 +18,6 @@ class E2EConfig:
     client: Client
     product_id: Optional[str]
     target_tweet_url: Optional[str]
-    target_x_user: Optional[str]
     publish_text_prefix: str
     timeout_seconds: int
     user_input_timeout_seconds: int
@@ -45,7 +44,6 @@ def load_e2e_config(base_dir: Path) -> E2EConfig:
         client=client,
         product_id=os.getenv("MATE_E2E_PRODUCT_ID", "").strip() or None,
         target_tweet_url=os.getenv("MATE_E2E_TARGET_TWEET_URL", "").strip() or None,
-        target_x_user=os.getenv("MATE_E2E_TARGET_X_USER", "").strip() or None,
         publish_text_prefix=os.getenv("MATE_E2E_PUBLISH_TEXT_PREFIX", "Wyse E2E test").strip()
         or "Wyse E2E test",
         timeout_seconds=_env_int("MATE_E2E_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS),
