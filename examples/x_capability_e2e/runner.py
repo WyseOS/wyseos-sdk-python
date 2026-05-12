@@ -54,8 +54,6 @@ class ScenarioRunResult:
             "environment": self.environment,
             "capability": self.capability,
             "task_type": self.task_type,
-            "execution_mode": self.execution_mode,
-            "browser_available": self.browser_available,
             "expected": self.expected,
             "status": self.status,
             "matched_reason": self.matched_reason,

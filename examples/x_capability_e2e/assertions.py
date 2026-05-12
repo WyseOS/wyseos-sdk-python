@@ -15,7 +15,7 @@ FAILURE_REASON_MARKERS = {
     "extension_unavailable": ["browser", "extension", "unavailable"],
 }
 PLATFORM_ERROR_MARKERS = ["rate limit", "duplicate", "spam", "policy"]
-AUTH_ERROR_MARKERS = ["x_api_authorize", "authorization", "connector"]
+AUTH_ERROR_MARKERS = ["x_api_authorize", "authorization"]
 
 
 @dataclass(frozen=True)
