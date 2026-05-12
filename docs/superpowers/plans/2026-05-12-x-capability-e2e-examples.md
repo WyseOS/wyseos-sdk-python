@@ -196,22 +196,23 @@ class Scenario:
     capability: Capability
     task_type: TaskType
     expected: Expected
+    expected_reason: Optional[str] = None
 
 
 SCENARIOS = [
     Scenario("local-extension-reply", "local", "extension", "reply", "success"),
     Scenario("local-extension-publish", "local", "extension", "publish", "success"),
     Scenario("local-extension-interact", "local", "extension", "interact", "success"),
-    Scenario("local-extension-dm", "local", "extension", "dm", "failure"),
-    Scenario("local-api-reply", "local", "api", "reply", "failure"),
+    Scenario("local-extension-dm", "local", "extension", "dm", "failure", "extension_dm_unsupported"),
+    Scenario("local-api-reply", "local", "api", "reply", "failure", "api_reply_unsupported"),
     Scenario("local-api-publish", "local", "api", "publish", "success"),
     Scenario("local-api-interact", "local", "api", "interact", "success"),
     Scenario("local-api-dm", "local", "api", "dm", "success"),
-    Scenario("remote-extension-reply", "remote", "extension", "reply", "failure"),
-    Scenario("remote-extension-publish", "remote", "extension", "publish", "failure"),
-    Scenario("remote-extension-interact", "remote", "extension", "interact", "failure"),
-    Scenario("remote-extension-dm", "remote", "extension", "dm", "failure"),
-    Scenario("remote-api-reply", "remote", "api", "reply", "failure"),
+    Scenario("remote-extension-reply", "remote", "extension", "reply", "failure", "extension_unavailable"),
+    Scenario("remote-extension-publish", "remote", "extension", "publish", "failure", "extension_unavailable"),
+    Scenario("remote-extension-interact", "remote", "extension", "interact", "failure", "extension_unavailable"),
+    Scenario("remote-extension-dm", "remote", "extension", "dm", "failure", "extension_unavailable"),
+    Scenario("remote-api-reply", "remote", "api", "reply", "failure", "api_reply_unsupported"),
     Scenario("remote-api-publish", "remote", "api", "publish", "success"),
     Scenario("remote-api-interact", "remote", "api", "interact", "success"),
     Scenario("remote-api-dm", "remote", "api", "dm", "success"),
@@ -396,22 +397,7 @@ def _contains_all(text: str, markers: list[str]) -> bool:
     return all(marker in text for marker in markers)
 ```
 
-- [ ] **Step 2: 编写场景对应拒绝原因**
-
-追加：
-
-```python
-def expected_failure_reason(scenario: Scenario) -> Optional[str]:
-    if scenario.capability == "api" and scenario.task_type == "reply":
-        return "api_reply_unsupported"
-    if scenario.capability == "extension" and scenario.task_type == "dm":
-        return "extension_dm_unsupported"
-    if scenario.environment == "remote" and scenario.capability == "extension":
-        return "extension_unavailable"
-    return None
-```
-
-- [ ] **Step 3: 编写 `classify_result()`**
+- [ ] **Step 2: 编写 `classify_result()`**
 
 追加：
 
@@ -427,22 +413,22 @@ def classify_result(scenario: Scenario, result: TaskResult) -> AssertionResult:
     if any(marker in text for marker in AUTH_ERROR_MARKERS):
         return AssertionResult("ERROR", "authorization_required", "X connector authorization is required")
 
-    expected_reason = expected_failure_reason(scenario)
     if scenario.expected == "failure":
-        if expected_reason and _contains_all(text, FAILURE_REASON_MARKERS[expected_reason]):
-            return AssertionResult("PASS", expected_reason)
-        return AssertionResult("FAIL", expected_reason, "Expected rejection reason was not found")
+        if scenario.expected_reason and _contains_all(text, FAILURE_REASON_MARKERS[scenario.expected_reason]):
+            return AssertionResult("PASS", scenario.expected_reason)
+        return AssertionResult("FAIL", scenario.expected_reason, "Expected rejection reason was not found")
 
-    for reason, markers in FAILURE_REASON_MARKERS.items():
-        if _contains_all(text, markers):
-            return AssertionResult("FAIL", reason, "Unexpected rejection reason was found")
+    if not result.success:
+        for reason, markers in FAILURE_REASON_MARKERS.items():
+            if _contains_all(text, markers):
+                return AssertionResult("FAIL", reason, "Unexpected rejection reason was found")
 
     if result.success and not result.error:
         return AssertionResult("PASS")
     return AssertionResult("FAIL", message=result.error or "Task did not succeed")
 ```
 
-- [ ] **Step 4: 运行语法检查**
+- [ ] **Step 3: 运行语法检查**
 
 Run:
 
@@ -456,7 +442,7 @@ Expected:
 Compiling 'examples/x_capability_e2e/assertions.py'...
 ```
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 4: 提交**
 
 ```bash
 git add examples/x_capability_e2e/assertions.py
@@ -589,15 +575,15 @@ def run_scenario(
     browser_available = browser_available_for(scenario.environment)
     nonce = make_nonce()
     run_id = make_run_id(run_prefix, scenario)
-    task = build_task_prompt(
-        scenario=scenario,
-        run_id=run_id,
-        nonce=nonce,
-        publish_text_prefix=config.publish_text_prefix,
-        target_tweet_url=config.target_tweet_url,
-        target_x_user=config.target_x_user,
-    )
     try:
+        task = build_task_prompt(
+            scenario=scenario,
+            run_id=run_id,
+            nonce=nonce,
+            publish_text_prefix=config.publish_text_prefix,
+            target_tweet_url=config.target_tweet_url,
+            target_x_user=config.target_x_user,
+        )
         extra = _build_extra(config, execution_mode)
         req = CreateSessionRequest(
             task=task,
@@ -947,10 +933,29 @@ smoke ok
 Run:
 
 ```bash
-rg -n "task_success|task_error|message_count" examples/x_capability_e2e
+python3 - <<'PY'
+from pathlib import Path
+
+needles = ("task_success", "task_error", "message_count")
+root = Path("examples/x_capability_e2e")
+matches = []
+for path in root.rglob("*"):
+    if path.is_file() and path.suffix in {".py", ".md", ".json"}:
+        text = path.read_text(encoding="utf-8")
+        for needle in needles:
+            if needle in text:
+                matches.append(f"{path}: {needle}")
+if matches:
+    raise SystemExit("\n".join(matches))
+print("summary fields ok")
+PY
 ```
 
-Expected: no matches, except if these strings only appear in comments; remove comments if present.
+Expected:
+
+```text
+summary fields ok
+```
 
 - [ ] **Step 4: 可选 Live 单场景验证**
 
@@ -987,5 +992,5 @@ If Task 6 made no file changes, skip this commit.
 
 - Spec 覆盖：16 场景、`run_task()`、结构化断言、timeout 注入、非阻塞授权策略、摘要 JSON + 调试 log、run ID + nonce、防平台风控误判，均有对应任务。
 - 占位检查：计划中无未完成占位符。
-- 类型一致性：`Scenario` 只保留核心字段；`execution_mode` 和 `browser_available` 在 runner 中推导；JSON 不包含 `task_success`、`task_error`、`message_count`。
+- 类型一致性：`Scenario` 保留矩阵字段和静态 `expected_reason`；`execution_mode` 和 `browser_available` 在 runner 中推导；JSON 不包含 `task_success`、`task_error`、`message_count`。
 - 项目约束：不新增单元测试文件，不引入 pytest，不修改 SDK 源码。
