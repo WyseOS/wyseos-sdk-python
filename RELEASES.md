@@ -1,3 +1,19 @@
+## 🚀 Release 0.1.2 (2026-05-14)
+
+This release improves the SDK's core session runner behavior for non-interactive environments and makes WebSocket shutdown more reliable.
+
+### ✨ Improvements
+
+- **Safer `run_task()` input handling**: non-interactive runs now fail clearly when the agent requires user input, instead of hanging or leaving the task in an ambiguous state.
+- **Built-in `x_api_authorize` handling**: the core runner now recognizes X API authorization input messages, surfaces the authorization URL, and skips by default in non-interactive mode with a clear error.
+- **Cleaner history filtering**: `TaskRunner` now ignores replayed history messages during automated runs, reducing false state transitions from old session events.
+
+### 🛠️ Engineering
+
+- **More robust WebSocket disconnects**: shutdown now tolerates benign timeout / closed-loop races and avoids noisy close failures during normal teardown.
+- **Stable local WebSocket host resolution**: `localhost` is normalized for WebSocket connection setup to reduce local connectivity inconsistencies.
+- **Clearer runner state management**: pending input state and skipped-authorization state are now tracked explicitly inside `TaskRunner`.
+
 ## 🚀 Release 0.1.0 (2026-04-28)
 
 Initial release of the **OctoEvo** Python SDK — a unified client for OctoEvo's agent, marketing, and product-analysis platform.
