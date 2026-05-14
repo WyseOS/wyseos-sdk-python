@@ -9,7 +9,7 @@ import threading
 import time
 import webbrowser
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlencode
 
 from pydantic import BaseModel
@@ -109,6 +109,14 @@ class TaskMode(Enum):
     Marketing = "marketing"
 
 
+class ExecutionMode(Enum):
+    """Execution mode for X-capability selection."""
+
+    Auto = "auto"
+    ApiOnly = "api_only"
+    ExtensionOnly = "extension_only"
+
+
 class TaskRunner:
     """High-level task execution interface."""
 
@@ -125,9 +133,9 @@ class TaskRunner:
         self._pending_request_at: float = 0.0
         self._pending_empty_input_request_id: Optional[str] = None
         self._marketing_chunk_buffers: Dict[str, Any] = {}
+        self._marketing_buffer_lock = threading.Lock()
         self._interactive_mode = False
         self._ignore_history_messages = False
-        self._x_api_authorize_skipped_error: Optional[str] = None
 
     def _wait_until_connected(self, timeout_seconds: float = CONNECT_WAIT_TIMEOUT_SECONDS) -> bool:
         deadline = time.time() + timeout_seconds
@@ -163,6 +171,92 @@ class TaskRunner:
         self._pending_request_at = 0.0
         completion_events["error"].set()
 
+    @staticmethod
+    def _new_marketing_chunk_buffers() -> Dict[str, Any]:
+        return {
+            RICH_TYPE_MARKETING_TWEET_REPLY: [],
+            RICH_TYPE_MARKETING_TWEET_INTERACT: [],
+            RICH_TYPE_WRITER_TWITTER: {},
+        }
+
+    def _reset_marketing_chunk_buffers(self) -> None:
+        with self._marketing_buffer_lock:
+            self._marketing_chunk_buffers = self._new_marketing_chunk_buffers()
+
+    def _clear_pending_input_state(self) -> None:
+        self._pending_request_id = None
+        self._pending_input_type = InputType.TEXT
+        self._pending_request_at = 0.0
+        self._pending_empty_input_request_id = None
+
+    @staticmethod
+    def _x_api_authorize_resume_prompt(options: TaskExecutionOptions) -> str:
+        if options.browser_available:
+            return (
+                "After completing authorization in the browser, return here and press Enter "
+                "to continue this task."
+            )
+        return (
+            "Open this URL in a browser on your local machine, finish authorization there, "
+            "then return to this terminal and press Enter to continue this task."
+        )
+
+    def _build_noninteractive_x_api_authorize_error(
+        self,
+        payload: Dict[str, Any],
+        options: TaskExecutionOptions,
+    ) -> str:
+        auth_url = str(payload.get("auth_url") or "").strip()
+        reason_message = str(payload.get("reason_message") or "").strip()
+
+        if reason_message:
+            print(reason_message)
+        if auth_url:
+            _show_or_open_url(auth_url, options, "Open this URL to authorize X API access")
+        if not options.browser_available:
+            print(
+                "This SDK call has no local browser integration. If the task is running on a "
+                "remote server, open the URL on another machine with a browser."
+            )
+
+        detail = (
+            "X authorization is required. run_task() does not wait for interactive OAuth "
+            "recovery; pre-authorize the X credential or switch to run_interactive_session()."
+        )
+        if auth_url:
+            detail += f" Authorization URL: {auth_url}"
+        return detail
+
+    @staticmethod
+    def _normalize_execution_mode(
+        execution_mode: Optional[Union[str, ExecutionMode]],
+    ) -> Optional[str]:
+        if execution_mode is None:
+            return None
+        if isinstance(execution_mode, ExecutionMode):
+            return execution_mode.value
+        normalized = str(execution_mode).strip()
+        if not normalized:
+            return None
+        allowed = {mode.value for mode in ExecutionMode}
+        if normalized not in allowed:
+            raise ValueError(
+                "Unsupported execution_mode "
+                f"{normalized!r}. Expected one of: {', '.join(sorted(allowed))}."
+            )
+        return normalized
+
+    def _merge_extra(
+        self,
+        extra: Optional[Dict[str, Any]],
+        execution_mode: Optional[Union[str, ExecutionMode]],
+    ) -> Optional[Dict[str, Any]]:
+        merged = dict(extra or {})
+        normalized_mode = self._normalize_execution_mode(execution_mode)
+        if normalized_mode:
+            merged["execution_mode"] = normalized_mode
+        return merged or None
+
     def run_task(
         self,
         task: str,
@@ -170,6 +264,7 @@ class TaskRunner:
         task_mode: TaskMode = TaskMode.Default,
         extra: Optional[Dict[str, Any]] = None,
         options: TaskExecutionOptions = None,
+        execution_mode: Optional[Union[str, ExecutionMode]] = None,
     ) -> TaskResult:
         """Execute a single task and return complete result."""
         if options is None:
@@ -196,14 +291,9 @@ class TaskRunner:
         self._pending_input_type = InputType.TEXT
         self._pending_request_at = 0.0
         self._pending_empty_input_request_id = None
-        self._marketing_chunk_buffers = {
-            RICH_TYPE_MARKETING_TWEET_REPLY: [],
-            RICH_TYPE_MARKETING_TWEET_INTERACT: [],
-            RICH_TYPE_WRITER_TWITTER: {},
-        }
+        self._reset_marketing_chunk_buffers()
         self._interactive_mode = False
         self._ignore_history_messages = True
-        self._x_api_authorize_skipped_error = None
 
         def on_message(message):
             self._handle_message(message, result_container, completion_events, options)
@@ -235,7 +325,8 @@ class TaskRunner:
             )
 
         # Start the task
-        self._start_task(task, attachments or [], task_mode, extra)
+        task_extra = self._merge_extra(extra, execution_mode)
+        self._start_task(task, attachments or [], task_mode, task_extra)
 
         # Wait for completion
         timeout = options.completion_timeout
@@ -255,26 +346,16 @@ class TaskRunner:
                         or time.time() - completed_at >= FOLLOW_UP_GRACE_SECONDS
                         or completion_events["connection_closed"].is_set()
                     ):
-                        skipped_error = self._x_api_authorize_skipped_error
-                        if skipped_error:
-                            success = False
-                            error = skipped_error
-                        else:
-                            success = not result_container.get("stopped", False)
-                            error = (
-                                "Task was stopped"
-                                if result_container.get("stopped")
-                                else None
-                            )
+                        success = not result_container.get("stopped", False)
+                        error = (
+                            "Task was stopped"
+                            if result_container.get("stopped")
+                            else None
+                        )
                         break
                 if completion_events["connection_closed"].is_set():
-                    skipped_error = self._x_api_authorize_skipped_error
-                    if skipped_error:
-                        success = False
-                        error = skipped_error
-                    else:
-                        success = result_container["task_completed"]
-                        error = None if success else "Connection closed before completion"
+                    success = result_container["task_completed"]
+                    error = None if success else "Connection closed before completion"
                     break
                 if time.time() >= deadline:
                     success = False
@@ -309,6 +390,7 @@ class TaskRunner:
         task_mode: TaskMode = TaskMode.Default,
         extra: Optional[Dict[str, Any]] = None,
         options: TaskExecutionOptions = None,
+        execution_mode: Optional[Union[str, ExecutionMode]] = None,
     ) -> None:
         """Run an interactive session with user input support."""
         if options is None:
@@ -336,14 +418,9 @@ class TaskRunner:
         self._pending_input_type = InputType.TEXT
         self._pending_request_at = 0.0
         self._pending_empty_input_request_id = None
-        self._marketing_chunk_buffers = {
-            RICH_TYPE_MARKETING_TWEET_REPLY: [],
-            RICH_TYPE_MARKETING_TWEET_INTERACT: [],
-            RICH_TYPE_WRITER_TWITTER: {},
-        }
+        self._reset_marketing_chunk_buffers()
         self._interactive_mode = True
         self._ignore_history_messages = False
-        self._x_api_authorize_skipped_error = None
 
         def on_message(message):
             self._handle_message(message, result_container, completion_events, options)
@@ -376,7 +453,8 @@ class TaskRunner:
             return
 
         # Start the task
-        self._start_task(initial_task, attachments or [], task_mode, extra)
+        task_extra = self._merge_extra(extra, execution_mode)
+        self._start_task(initial_task, attachments or [], task_mode, task_extra)
         print(f"→ Started task: {initial_task}")
 
         # Interactive loop: only prompt when server requests user input.
@@ -611,17 +689,31 @@ class TaskRunner:
         timestamp: str,
         error: str,
     ) -> None:
+        result_container["has_error"] = True
+        result_container["error"] = error
+        self._clear_pending_input_state()
+        self._log_event("input", error, timestamp)
+        completion_events["error"].set()
         try:
             self.ws_client.send_stop()
         except Exception as exc:
             logger.debug("Failed to send stop for non-interactive input: %s", exc)
+        try:
+            self.client.session.stop(self.session_info.session_id)
+        except Exception as exc:
+            logger.debug("Failed to stop session for non-interactive input: %s", exc)
+
+    def _set_execution_error(
+        self,
+        result_container: Dict,
+        completion_events: Dict,
+        timestamp: str,
+        error: str,
+    ) -> None:
         result_container["has_error"] = True
         result_container["error"] = error
-        self._pending_request_id = None
-        self._pending_input_type = InputType.TEXT
-        self._pending_request_at = 0.0
-        self._pending_empty_input_request_id = None
-        self._log_event("input", error, timestamp)
+        self._clear_pending_input_state()
+        self._log_event("error", error, timestamp)
         completion_events["error"].set()
 
     def _handle_text_message(
@@ -737,114 +829,44 @@ class TaskRunner:
             return None
         return message_data
 
-    def _find_target_x_connector_id(
-        self,
-        external_user_id: Optional[str],
-        external_username: Optional[str],
-    ) -> Optional[str]:
-        accounts = self.client.user.list_x_accounts().items
-        if external_user_id:
-            for account in accounts:
-                if account.external_user_id == external_user_id:
-                    return account.connector_id
-        if external_username:
-            normalized = external_username.lstrip("@")
-            for account in accounts:
-                account_username = account.external_username or ""
-                if account_username.lstrip("@") == normalized:
-                    return account.connector_id
-        return None
-
-    def _warn_x_authorize_target_unverified(
-        self,
-        external_user_id: Optional[str],
-        external_username: Optional[str],
-    ) -> None:
-        if external_username or external_user_id:
-            handle = f"@{external_username.lstrip('@')}" if external_username else "(unknown handle)"
-            print(
-                "WARNING: The agent requested X account "
-                f"{handle} (external_user_id={external_user_id or 'unknown'})."
-            )
-            print("Make sure the authorization page is signed in as this account, or the task cannot continue.")
-            return
-        print("WARNING: The agent did not provide a target X account. Make sure you authorize the correct account.")
-
     def _handle_x_api_authorize_message(
         self,
         payload: Dict[str, Any],
         options: TaskExecutionOptions,
         timestamp: str,
-    ) -> None:
-        request_id = payload.get("request_id")
-        external_user_id = payload.get("external_user_id")
-        external_username = payload.get("external_username")
-        reason_code = payload.get("reason_code")
+    ) -> Optional[str]:
+        request_id = str(payload.get("request_id") or "").strip()
+        reason_code = str(payload.get("reason_code") or "").strip()
         auth_url = str(payload.get("auth_url") or "").strip()
         reason_message = str(payload.get("reason_message") or "").strip()
+
+        if not request_id:
+            error = "x_api_authorize is missing request_id; cannot resume the current task."
+            logger.error(error)
+            return error
 
         if reason_message:
             print(reason_message)
 
-        if auth_url:
-            logger.info(
-                "x_api_authorize auth_url received from agent (reason=%s, external_username=%s)",
-                reason_code or "unknown",
-                external_username or "",
+        if not auth_url:
+            error = (
+                "x_api_authorize is missing auth_url. SDK will not create a fallback "
+                "authorization URL because it would lose the agent's same-round resume semantics."
             )
-            _show_or_open_url(auth_url, options, "Open this URL to authorize X API access")
-            print("After completing authorization in the browser, return here and press Enter to continue this task.")
-            self._pending_request_id = request_id
-            self._pending_input_type = InputType.TEXT
-            self._pending_request_at = time.time()
-            self._pending_empty_input_request_id = request_id
-            if options.event_logging_enabled:
-                self._log_event(
-                    "system",
-                    f"x_api_authorize url received reason={reason_code or 'unknown'}",
-                    timestamp,
-                )
-            return
+            logger.error("%s (reason=%s)", error, reason_code or "unknown")
+            return error
 
-        target_connector_id = None
-        checked_accounts = True
         logger.info(
-            "x_api_authorize auth_url missing; falling back to sdk authorize flow (reason=%s, external_username=%s)",
+            "x_api_authorize auth_url received from agent (reason=%s)",
             reason_code or "unknown",
-            external_username or "",
         )
-        try:
-            target_connector_id = self._find_target_x_connector_id(
-                external_user_id=external_user_id,
-                external_username=external_username,
+        _show_or_open_url(auth_url, options, "Open this URL to authorize X API access")
+        if not options.browser_available:
+            print(
+                "This session cannot open a local browser automatically. If you are connected "
+                "to a remote server, copy the URL into a browser on your local machine."
             )
-        except Exception as exc:
-            checked_accounts = False
-            logger.warning("Failed to list X connector accounts: %s", exc)
-            print("WARNING: Could not list X connector accounts. Make sure you authorize the correct X account.")
-
-        if checked_accounts and target_connector_id is None:
-            self._warn_x_authorize_target_unverified(external_user_id, external_username)
-
-        try:
-            resp = self.client.user.authorize_x_account(
-                target_connector_id=target_connector_id,
-            )
-        except Exception as exc:
-            logger.error("Failed to create X authorization URL: %s", exc)
-            print(f"X authorization failed: {exc}")
-            if options.event_logging_enabled:
-                self._log_event("error", f"x_api_authorize failed: {exc}", timestamp)
-            self._pending_request_id = request_id
-            self._pending_input_type = InputType.TEXT
-            self._pending_request_at = time.time()
-            self._pending_empty_input_request_id = request_id
-            print("Could not create the authorization URL. Press Enter here to notify the agent and continue.")
-            return
-
-        _show_or_open_url(resp.auth_url, options, "Open this URL to authorize X API access")
-        print("After completing authorization in the browser, return here and press Enter to continue this task.")
-
+        print(self._x_api_authorize_resume_prompt(options))
         self._pending_request_id = request_id
         self._pending_input_type = InputType.TEXT
         self._pending_request_at = time.time()
@@ -852,63 +874,10 @@ class TaskRunner:
         if options.event_logging_enabled:
             self._log_event(
                 "system",
-                f"x_api_authorize fallback url issued reason={reason_code or 'unknown'} target_connector_id={target_connector_id or 'new'}",
+                f"x_api_authorize url received reason={reason_code or 'unknown'}",
                 timestamp,
             )
-
-    def _skip_x_api_authorize_message(
-        self,
-        message: Dict[str, Any],
-        payload: Dict[str, Any],
-        options: TaskExecutionOptions,
-        timestamp: str,
-    ) -> None:
-        msg_inner = message.get("message", {})
-        if isinstance(msg_inner, str):
-            msg_inner = {}
-        message_data = msg_inner.get("data", {})
-        if isinstance(message_data, str):
-            message_data = {}
-
-        request_id = message_data.get("request_id")
-        reason_code = str(payload.get("reason_code") or "").strip()
-        auth_url = str(payload.get("auth_url") or "").strip()
-        reason_message = str(payload.get("reason_message") or "").strip()
-
-        if reason_message:
-            print(reason_message)
-        if auth_url:
-            _show_or_open_url(auth_url, options, "Open this URL to authorize X API access")
-
-        detail = (
-            "x_api_authorize is required. Authorization was skipped by default; "
-            "retry after completing X authorization."
-        )
-        if auth_url:
-            detail += f" Authorization URL: {auth_url}"
-        self._x_api_authorize_skipped_error = detail
-
-        if not request_id:
-            logger.warning("x_api_authorize missing request_id; cannot send skip response")
-            if options.event_logging_enabled:
-                self._log_event(
-                    "system",
-                    f"x_api_authorize skipped without request_id reason={reason_code or 'unknown'}",
-                    timestamp,
-                )
-            return
-
-        self.ws_client.send_message(
-            WebSocketClient.create_text_input_response(request_id, "skip")
-        )
-        if options.verbose:
-            print("-> Skipped x_api_authorize by default")
-        if options.event_logging_enabled:
-            self._log_event(
-                "system",
-                f"x_api_authorize skipped reason={reason_code or 'unknown'}",
-                timestamp,
-            )
+        return None
 
     def _handle_input_message(
         self,
@@ -930,22 +899,39 @@ class TaskRunner:
         message_data = msg_inner.get("data", {})
         if isinstance(message_data, str):
             message_data = {}
-        request_id = message_data.get("request_id")
         inner_type = msg_inner.get("type", "")
+        x_api_authorize_payload = self._get_x_api_authorize_payload(message)
+        if x_api_authorize_payload is not None:
+            if not self._interactive_mode:
+                self._fail_noninteractive_input(
+                    result_container,
+                    completion_events,
+                    timestamp,
+                    self._build_noninteractive_x_api_authorize_error(
+                        x_api_authorize_payload,
+                        options,
+                    ),
+                )
+                return
+            error = self._handle_x_api_authorize_message(
+                x_api_authorize_payload,
+                options,
+                timestamp,
+            )
+            if error:
+                self._set_execution_error(
+                    result_container,
+                    completion_events,
+                    timestamp,
+                    error,
+                )
+            return
+        request_id = message_data.get("request_id")
 
         if not request_id:
             logger.debug(
                 "ignored input message without request_id (inner_type=%s)",
                 inner_type,
-            )
-            return
-        x_api_authorize_payload = self._get_x_api_authorize_payload(message)
-        if x_api_authorize_payload is not None:
-            self._skip_x_api_authorize_message(
-                message,
-                x_api_authorize_payload,
-                options,
-                timestamp,
             )
             return
         if options.verbose:
@@ -1130,22 +1116,28 @@ class TaskRunner:
         if is_chunk and data:
             if rich_type == RICH_TYPE_WRITER_TWITTER:
                 draft_id = data.get("draft_id")
+                chunk_len = 0
                 if draft_id:
-                    writer_map = self._marketing_chunk_buffers[RICH_TYPE_WRITER_TWITTER]
-                    current = writer_map.get(draft_id)
-                    if current:
-                        current["content"] = (
-                            f"{current.get('content', '')}{data.get('content', '')}"
+                    with self._marketing_buffer_lock:
+                        writer_map = self._marketing_chunk_buffers.setdefault(
+                            RICH_TYPE_WRITER_TWITTER, {}
                         )
-                    else:
-                        writer_map[draft_id] = dict(data)
-                    if options.verbose:
+                        current = writer_map.get(draft_id)
+                        if current:
+                            current["content"] = (
+                                f"{current.get('content', '')}{data.get('content', '')}"
+                            )
+                        else:
+                            writer_map[draft_id] = dict(data)
                         chunk_len = len(data.get("content", "") or "")
+                    if options.verbose:
                         print(f"  [chunk] {rich_type} {draft_id}: +{chunk_len} chars")
             else:
-                self._marketing_chunk_buffers[rich_type].append(data)
+                with self._marketing_buffer_lock:
+                    chunk_list = self._marketing_chunk_buffers.setdefault(rich_type, [])
+                    chunk_list.append(data)
+                    chunk_count = len(chunk_list)
                 if options.verbose:
-                    chunk_count = len(self._marketing_chunk_buffers[rich_type])
                     print(f"  [chunk] {rich_type}: {chunk_count} items")
 
             if options.event_logging_enabled:
@@ -1166,10 +1158,11 @@ class TaskRunner:
                     )
                 elif rich_type == RICH_TYPE_WRITER_TWITTER:
                     print(f"  [tweet] full data: {summary.get('tweet', 0)} items")
-            if rich_type == RICH_TYPE_WRITER_TWITTER:
-                self._marketing_chunk_buffers[RICH_TYPE_WRITER_TWITTER] = {}
-            else:
-                self._marketing_chunk_buffers[rich_type] = []
+            with self._marketing_buffer_lock:
+                if rich_type == RICH_TYPE_WRITER_TWITTER:
+                    self._marketing_chunk_buffers[RICH_TYPE_WRITER_TWITTER] = {}
+                else:
+                    self._marketing_chunk_buffers[rich_type] = []
 
     def _fetch_marketing_full_data(
         self, rich_type: str, options: TaskExecutionOptions, timestamp: str

@@ -11,6 +11,7 @@ from .client import Client
 from .config import ClientOptions
 from .errors import APIError, ConfigError, NetworkError, SessionExecutionError, ValidationError, WebSocketError
 from .factory import create_task_runner
+from .task_runner import ExecutionMode
 
 __all__ = [
     "Client",
@@ -21,5 +22,6 @@ __all__ = [
     "WebSocketError",
     "SessionExecutionError",
     "ConfigError",
+    "ExecutionMode",
     "create_task_runner",
 ]
