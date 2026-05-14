@@ -28,6 +28,10 @@ from .plan import AcceptPlan
 
 logger = logging.getLogger(__name__)
 
+WEBSOCKET_CLOSE_TIMEOUT_SECONDS = 2.0
+WEBSOCKET_SHUTDOWN_TIMEOUT_SECONDS = 3.0
+WEBSOCKET_THREAD_JOIN_TIMEOUT_SECONDS = 3.0
+
 
 def _ws_netloc(parsed) -> str:
     host = parsed.hostname or ""
@@ -40,6 +44,8 @@ def _ws_netloc(parsed) -> str:
 
 def _is_benign_disconnect_error(exc: Exception) -> bool:
     if isinstance(exc, (TimeoutError, concurrent.futures.TimeoutError)):
+        return True
+    if isinstance(exc, (asyncio.CancelledError, concurrent.futures.CancelledError)):
         return True
     if isinstance(exc, RuntimeError) and "Event loop is closed" in str(exc):
         return True
@@ -203,33 +209,37 @@ class WebSocketClient:
         logger.debug("disconnect requested (session_id=%s)", self.session_id)
         self.is_connected = False
 
-        if self._heartbeat_task and self.loop:
+        close_future = None
+        if self.loop and not self.loop.is_closed():
             try:
-                asyncio.run_coroutine_threadsafe(
-                    self._stop_heartbeat(), self.loop
-                ).result(timeout=DEFAULT_TIMEOUT)
-            except Exception as e:
-                logger.warning(f"Error stopping heartbeat: {e}")
-
-        if self.websocket and self.loop and not self.loop.is_closed():
-            try:
-                asyncio.run_coroutine_threadsafe(
-                    self.websocket.close(), self.loop
-                ).result(timeout=DEFAULT_TIMEOUT)
+                close_future = asyncio.run_coroutine_threadsafe(
+                    self._shutdown_connection(),
+                    self.loop,
+                )
+                close_future.result(timeout=WEBSOCKET_SHUTDOWN_TIMEOUT_SECONDS)
             except Exception as e:
                 if _is_benign_disconnect_error(e):
-                    logger.debug("WebSocket already closed during disconnect")
+                    logger.debug("WebSocket shutdown timed out during disconnect")
                 else:
-                    logger.warning(f"Error closing WebSocket connection: {e}")
+                    logger.warning("Error during WebSocket shutdown: %s", e)
+                if close_future:
+                    close_future.cancel()
+                self._abort_websocket_transport()
         elif self.websocket:
-            logger.debug("Skipping websocket close because event loop is unavailable")
+            self._abort_websocket_transport()
 
         if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=DEFAULT_TIMEOUT)
+            self.thread.join(timeout=WEBSOCKET_THREAD_JOIN_TIMEOUT_SECONDS)
             if self.thread.is_alive():
-                logger.warning("websocket thread still alive after join timeout")
+                self._request_loop_stop()
+                self.thread.join(timeout=WEBSOCKET_THREAD_JOIN_TIMEOUT_SECONDS)
+                if self.thread.is_alive():
+                    logger.warning("websocket thread still alive after join timeout")
 
         self.websocket = None
+        self._heartbeat_task = None
+        self.loop = None
+        self.thread = None
         logger.debug("disconnect finished in %.2fs", time.time() - started_at)
 
     def send_message(self, message: Union[Dict[str, Any], UserTaskMessage]) -> None:
@@ -250,19 +260,7 @@ class WebSocketClient:
                     f"Message size ({len(message_json)}) exceeds maximum ({self.max_message_size})",
                     session_id=self.session_id,
                 )
-
-            # If we're in the same event loop thread, schedule send without blocking to avoid deadlock
-            try:
-                current_loop = asyncio.get_running_loop()
-            except RuntimeError:
-                current_loop = None
-
-            if self.loop and current_loop is self.loop:
-                asyncio.create_task(self.websocket.send(message_json))
-            else:
-                asyncio.run_coroutine_threadsafe(
-                    self.websocket.send(message_json), self.loop
-                ).result(timeout=DEFAULT_TIMEOUT)
+            self._schedule_send(message_json, "message")
         except Exception as e:
             raise WebSocketError(
                 f"Failed to send message: {str(e)}", session_id=self.session_id, cause=e
@@ -275,18 +273,7 @@ class WebSocketClient:
             )
 
         try:
-            # Avoid blocking when called from within the event loop thread
-            try:
-                current_loop = asyncio.get_running_loop()
-            except RuntimeError:
-                current_loop = None
-
-            if self.loop and current_loop is self.loop:
-                asyncio.create_task(self._send_ping())
-            else:
-                asyncio.run_coroutine_threadsafe(self._send_ping(), self.loop).result(
-                    timeout=DEFAULT_TIMEOUT
-                )
+            self._schedule_background_coroutine(self._send_ping(), "ping")
         except Exception as e:
             raise WebSocketError(
                 f"Failed to send ping: {str(e)}", session_id=self.session_id, cause=e
@@ -300,18 +287,7 @@ class WebSocketClient:
 
         stop_message = {"type": MessageType.STOP}
         try:
-            # Avoid blocking when called from within the event loop thread
-            try:
-                current_loop = asyncio.get_running_loop()
-            except RuntimeError:
-                current_loop = None
-
-            if self.loop and current_loop is self.loop:
-                asyncio.create_task(self.websocket.send(json.dumps(stop_message)))
-            else:
-                asyncio.run_coroutine_threadsafe(
-                    self.websocket.send(json.dumps(stop_message)), self.loop
-                ).result(timeout=DEFAULT_TIMEOUT)
+            self._schedule_send(json.dumps(stop_message), "stop")
             logger.info("Sent stop command")
         except Exception as e:
             raise WebSocketError(
@@ -328,18 +304,7 @@ class WebSocketClient:
 
         pause_message = {"type": MessageType.PAUSE}
         try:
-            # Avoid blocking when called from within the event loop thread
-            try:
-                current_loop = asyncio.get_running_loop()
-            except RuntimeError:
-                current_loop = None
-
-            if self.loop and current_loop is self.loop:
-                asyncio.create_task(self.websocket.send(json.dumps(pause_message)))
-            else:
-                asyncio.run_coroutine_threadsafe(
-                    self.websocket.send(json.dumps(pause_message)), self.loop
-                ).result(timeout=DEFAULT_TIMEOUT)
+            self._schedule_send(json.dumps(pause_message), "pause")
             logger.info("Sent pause command")
         except Exception as e:
             raise WebSocketError(
@@ -348,12 +313,79 @@ class WebSocketClient:
                 cause=e,
             )
 
-    def _run_connection(self) -> None:
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
+    def _schedule_send(self, payload: str, action: str) -> None:
+        async def _send() -> None:
+            await self.websocket.send(payload)
+
+        self._schedule_background_coroutine(_send(), action)
+
+    def _schedule_background_coroutine(self, coro, action: str) -> None:
+        if not self.loop or self.loop.is_closed():
+            raise WebSocketError(
+                "WebSocket event loop is unavailable",
+                session_id=self.session_id,
+            )
 
         try:
-            self.loop.run_until_complete(self._connect_and_listen())
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        if current_loop is self.loop:
+            task = asyncio.create_task(coro)
+            task.add_done_callback(lambda future: self._consume_future_error(future, action))
+            return
+
+        future = asyncio.run_coroutine_threadsafe(coro, self.loop)
+        future.add_done_callback(lambda done: self._consume_future_error(done, action))
+
+    def _consume_future_error(self, future, action: str) -> None:
+        try:
+            future.result()
+        except Exception as exc:
+            if _is_benign_disconnect_error(exc):
+                logger.debug("WebSocket %s aborted during shutdown", action)
+                return
+            logger.warning("WebSocket %s failed: %s", action, exc)
+            if self.on_error:
+                self.on_error(exc)
+
+    def _request_loop_stop(self) -> None:
+        if not self.loop or self.loop.is_closed():
+            return
+        try:
+            self.loop.call_soon_threadsafe(self.loop.stop)
+        except Exception as exc:
+            logger.debug("Failed to stop event loop: %s", exc)
+
+    def _abort_current_transport(self) -> None:
+        if not self.websocket:
+            return
+        transport = getattr(self.websocket, "transport", None)
+        if transport is None:
+            return
+        try:
+            transport.abort()
+            logger.info("WebSocket transport aborted")
+        except Exception as exc:
+            logger.warning("Failed to abort WebSocket transport: %s", exc)
+
+    def _abort_websocket_transport(self) -> None:
+        if self.loop and not self.loop.is_closed():
+            try:
+                self.loop.call_soon_threadsafe(self._abort_current_transport)
+                return
+            except Exception as exc:
+                logger.debug("Failed to schedule WebSocket transport abort: %s", exc)
+        self._abort_current_transport()
+
+    def _run_connection(self) -> None:
+        loop = asyncio.new_event_loop()
+        self.loop = loop
+        asyncio.set_event_loop(loop)
+
+        try:
+            loop.run_until_complete(self._connect_and_listen())
         except Exception as e:
             logger.exception(
                 "WebSocket connection error (%s): %r",
@@ -363,7 +395,11 @@ class WebSocketClient:
             if self.on_error:
                 self.on_error(e)
         finally:
-            self.loop.close()
+            try:
+                loop.close()
+            finally:
+                if self.loop is loop:
+                    self.loop = None
 
     async def _connect_and_listen(self) -> None:
         try:
@@ -427,6 +463,23 @@ class WebSocketClient:
             except asyncio.CancelledError:
                 pass
             self._heartbeat_task = None
+
+    async def _shutdown_connection(self) -> None:
+        await self._stop_heartbeat()
+        if not self.websocket:
+            return
+        try:
+            await asyncio.wait_for(
+                self.websocket.close(),
+                timeout=WEBSOCKET_CLOSE_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            if _is_benign_disconnect_error(exc):
+                logger.debug("WebSocket close timed out during shutdown")
+            else:
+                logger.warning("WebSocket close failed during shutdown: %s", exc)
+        if not getattr(self.websocket, "closed", False):
+            self._abort_current_transport()
 
     async def _listen_for_messages(self) -> None:
         try:
