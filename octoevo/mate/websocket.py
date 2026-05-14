@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Optional, Union
 from urllib.parse import urljoin, urlparse
 
 import websockets
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .constants import (
     DEFAULT_TIMEOUT,
@@ -52,23 +52,13 @@ def _is_benign_disconnect_error(exc: Exception) -> bool:
     return False
 
 
-class TaskStatus(Enum):
-    """Task execution status."""
-
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
 class EventLog(BaseModel):
     """Structured event log for operations."""
 
     source: str
     content: str
     timestamp: str
-    metadata: Dict[str, str] = {}
+    metadata: Dict[str, str] = Field(default_factory=dict)
 
 
 class MessageType:
