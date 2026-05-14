@@ -3,6 +3,7 @@ WebSocket client
 """
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 import threading
@@ -26,6 +27,23 @@ from .models import UserTaskMessage
 from .plan import AcceptPlan
 
 logger = logging.getLogger(__name__)
+
+
+def _ws_netloc(parsed) -> str:
+    host = parsed.hostname or ""
+    if host == "localhost":
+        host = "127.0.0.1"
+    if parsed.port:
+        return f"{host}:{parsed.port}"
+    return host
+
+
+def _is_benign_disconnect_error(exc: Exception) -> bool:
+    if isinstance(exc, (TimeoutError, concurrent.futures.TimeoutError)):
+        return True
+    if isinstance(exc, RuntimeError) and "Event loop is closed" in str(exc):
+        return True
+    return False
 
 
 class TaskStatus(Enum):
@@ -183,6 +201,7 @@ class WebSocketClient:
     def disconnect(self) -> None:
         started_at = time.time()
         logger.debug("disconnect requested (session_id=%s)", self.session_id)
+        self.is_connected = False
 
         if self._heartbeat_task and self.loop:
             try:
@@ -192,23 +211,25 @@ class WebSocketClient:
             except Exception as e:
                 logger.warning(f"Error stopping heartbeat: {e}")
 
-        if self.websocket:
+        if self.websocket and self.loop and not self.loop.is_closed():
             try:
                 asyncio.run_coroutine_threadsafe(
                     self.websocket.close(), self.loop
                 ).result(timeout=DEFAULT_TIMEOUT)
             except Exception as e:
-                # Connection may already be closed during normal shutdown race conditions.
-                if isinstance(e, RuntimeError) and "Event loop is closed" in str(e):
+                if _is_benign_disconnect_error(e):
                     logger.debug("WebSocket already closed during disconnect")
                 else:
                     logger.warning(f"Error closing WebSocket connection: {e}")
+        elif self.websocket:
+            logger.debug("Skipping websocket close because event loop is unavailable")
 
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=DEFAULT_TIMEOUT)
             if self.thread.is_alive():
                 logger.warning("websocket thread still alive after join timeout")
 
+        self.websocket = None
         logger.debug("disconnect finished in %.2fs", time.time() - started_at)
 
     def send_message(self, message: Union[Dict[str, Any], UserTaskMessage]) -> None:
@@ -449,7 +470,7 @@ class WebSocketClient:
         else:
             ws_scheme = WEBSOCKET_PROTOCOL
 
-        ws_base_url = f"{ws_scheme}://{parsed.netloc}"
+        ws_base_url = f"{ws_scheme}://{_ws_netloc(parsed)}"
         endpoint = ENDPOINT_SESSION_WEBSOCKET.format(session_id=self.session_id)
         if self.jwt_token:
             full_url = f"{urljoin(ws_base_url, endpoint)}?authorization={self.jwt_token}"
