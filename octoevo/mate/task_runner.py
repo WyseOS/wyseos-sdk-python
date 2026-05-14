@@ -125,6 +125,9 @@ class TaskRunner:
         self._pending_request_at: float = 0.0
         self._pending_empty_input_request_id: Optional[str] = None
         self._marketing_chunk_buffers: Dict[str, Any] = {}
+        self._interactive_mode = False
+        self._ignore_history_messages = False
+        self._x_api_authorize_skipped_error: Optional[str] = None
 
     def _wait_until_connected(self, timeout_seconds: float = CONNECT_WAIT_TIMEOUT_SECONDS) -> bool:
         deadline = time.time() + timeout_seconds
@@ -198,6 +201,9 @@ class TaskRunner:
             RICH_TYPE_MARKETING_TWEET_INTERACT: [],
             RICH_TYPE_WRITER_TWITTER: {},
         }
+        self._interactive_mode = False
+        self._ignore_history_messages = True
+        self._x_api_authorize_skipped_error = None
 
         def on_message(message):
             self._handle_message(message, result_container, completion_events, options)
@@ -249,16 +255,26 @@ class TaskRunner:
                         or time.time() - completed_at >= FOLLOW_UP_GRACE_SECONDS
                         or completion_events["connection_closed"].is_set()
                     ):
-                        success = not result_container.get("stopped", False)
-                        error = (
-                            "Task was stopped"
-                            if result_container.get("stopped")
-                            else None
-                        )
+                        skipped_error = self._x_api_authorize_skipped_error
+                        if skipped_error:
+                            success = False
+                            error = skipped_error
+                        else:
+                            success = not result_container.get("stopped", False)
+                            error = (
+                                "Task was stopped"
+                                if result_container.get("stopped")
+                                else None
+                            )
                         break
                 if completion_events["connection_closed"].is_set():
-                    success = result_container["task_completed"]
-                    error = None if success else "Connection closed before completion"
+                    skipped_error = self._x_api_authorize_skipped_error
+                    if skipped_error:
+                        success = False
+                        error = skipped_error
+                    else:
+                        success = result_container["task_completed"]
+                        error = None if success else "Connection closed before completion"
                     break
                 if time.time() >= deadline:
                     success = False
@@ -325,6 +341,9 @@ class TaskRunner:
             RICH_TYPE_MARKETING_TWEET_INTERACT: [],
             RICH_TYPE_WRITER_TWITTER: {},
         }
+        self._interactive_mode = True
+        self._ignore_history_messages = False
+        self._x_api_authorize_skipped_error = None
 
         def on_message(message):
             self._handle_message(message, result_container, completion_events, options)
@@ -499,6 +518,8 @@ class TaskRunner:
     ):
         """Handle incoming WebSocket messages."""
         try:
+            if self._should_ignore_message(message):
+                return
             msg_type = WebSocketClient.get_message_type(message)
             timestamp = datetime.datetime.now().isoformat()
             if msg_type not in [MessageType.PING, MessageType.PONG]:
@@ -516,7 +537,13 @@ class TaskRunner:
             elif msg_type == MessageType.PLAN:
                 self._handle_plan_message(message, options, timestamp)
             elif msg_type == MessageType.INPUT:
-                self._handle_input_message(message, options, timestamp)
+                self._handle_input_message(
+                    message,
+                    result_container,
+                    completion_events,
+                    options,
+                    timestamp,
+                )
             elif msg_type == MessageType.RICH:
                 self._handle_rich_message(message, result_container, options, timestamp)
             elif msg_type == MessageType.TASK_RESULT:
@@ -552,6 +579,50 @@ class TaskRunner:
                     timestamp,
                     {"error": str(e)},
                 )
+
+    @staticmethod
+    def _metadata_value(message: Dict[str, Any], key: str) -> Optional[Any]:
+        for container in (
+            message,
+            message.get("metadata", {}),
+            message.get("message", {}),
+            message.get("message", {}).get("metadata", {})
+            if isinstance(message.get("message", {}), dict)
+            else {},
+        ):
+            if isinstance(container, dict) and key in container:
+                return container.get(key)
+        return None
+
+    def _should_ignore_message(self, message: Dict[str, Any]) -> bool:
+        if not self._ignore_history_messages:
+            return False
+        flag = self._metadata_value(message, "is_history_message")
+        if isinstance(flag, bool):
+            return flag
+        if isinstance(flag, str):
+            return flag.strip().lower() == "true"
+        return False
+
+    def _fail_noninteractive_input(
+        self,
+        result_container: Dict,
+        completion_events: Dict,
+        timestamp: str,
+        error: str,
+    ) -> None:
+        try:
+            self.ws_client.send_stop()
+        except Exception as exc:
+            logger.debug("Failed to send stop for non-interactive input: %s", exc)
+        result_container["has_error"] = True
+        result_container["error"] = error
+        self._pending_request_id = None
+        self._pending_input_type = InputType.TEXT
+        self._pending_request_at = 0.0
+        self._pending_empty_input_request_id = None
+        self._log_event("input", error, timestamp)
+        completion_events["error"].set()
 
     def _handle_text_message(
         self,
@@ -709,9 +780,39 @@ class TaskRunner:
         external_user_id = payload.get("external_user_id")
         external_username = payload.get("external_username")
         reason_code = payload.get("reason_code")
+        auth_url = str(payload.get("auth_url") or "").strip()
+        reason_message = str(payload.get("reason_message") or "").strip()
+
+        if reason_message:
+            print(reason_message)
+
+        if auth_url:
+            logger.info(
+                "x_api_authorize auth_url received from agent (reason=%s, external_username=%s)",
+                reason_code or "unknown",
+                external_username or "",
+            )
+            _show_or_open_url(auth_url, options, "Open this URL to authorize X API access")
+            print("After completing authorization in the browser, return here and press Enter to continue this task.")
+            self._pending_request_id = request_id
+            self._pending_input_type = InputType.TEXT
+            self._pending_request_at = time.time()
+            self._pending_empty_input_request_id = request_id
+            if options.event_logging_enabled:
+                self._log_event(
+                    "system",
+                    f"x_api_authorize url received reason={reason_code or 'unknown'}",
+                    timestamp,
+                )
+            return
 
         target_connector_id = None
         checked_accounts = True
+        logger.info(
+            "x_api_authorize auth_url missing; falling back to sdk authorize flow (reason=%s, external_username=%s)",
+            reason_code or "unknown",
+            external_username or "",
+        )
         try:
             target_connector_id = self._find_target_x_connector_id(
                 external_user_id=external_user_id,
@@ -751,12 +852,71 @@ class TaskRunner:
         if options.event_logging_enabled:
             self._log_event(
                 "system",
-                f"x_api_authorize url issued reason={reason_code or 'unknown'} target_connector_id={target_connector_id or 'new'}",
+                f"x_api_authorize fallback url issued reason={reason_code or 'unknown'} target_connector_id={target_connector_id or 'new'}",
+                timestamp,
+            )
+
+    def _skip_x_api_authorize_message(
+        self,
+        message: Dict[str, Any],
+        payload: Dict[str, Any],
+        options: TaskExecutionOptions,
+        timestamp: str,
+    ) -> None:
+        msg_inner = message.get("message", {})
+        if isinstance(msg_inner, str):
+            msg_inner = {}
+        message_data = msg_inner.get("data", {})
+        if isinstance(message_data, str):
+            message_data = {}
+
+        request_id = message_data.get("request_id")
+        reason_code = str(payload.get("reason_code") or "").strip()
+        auth_url = str(payload.get("auth_url") or "").strip()
+        reason_message = str(payload.get("reason_message") or "").strip()
+
+        if reason_message:
+            print(reason_message)
+        if auth_url:
+            _show_or_open_url(auth_url, options, "Open this URL to authorize X API access")
+
+        detail = (
+            "x_api_authorize is required. Authorization was skipped by default; "
+            "retry after completing X authorization."
+        )
+        if auth_url:
+            detail += f" Authorization URL: {auth_url}"
+        self._x_api_authorize_skipped_error = detail
+
+        if not request_id:
+            logger.warning("x_api_authorize missing request_id; cannot send skip response")
+            if options.event_logging_enabled:
+                self._log_event(
+                    "system",
+                    f"x_api_authorize skipped without request_id reason={reason_code or 'unknown'}",
+                    timestamp,
+                )
+            return
+
+        self.ws_client.send_message(
+            WebSocketClient.create_text_input_response(request_id, "skip")
+        )
+        if options.verbose:
+            print("-> Skipped x_api_authorize by default")
+        if options.event_logging_enabled:
+            self._log_event(
+                "system",
+                f"x_api_authorize skipped reason={reason_code or 'unknown'}",
                 timestamp,
             )
 
     def _handle_input_message(
-        self, message: Dict, options: TaskExecutionOptions, timestamp: str
+        self,
+        message: Dict,
+        result_container: Dict,
+        completion_events: Dict,
+        options: TaskExecutionOptions,
+        timestamp: str,
     ):
         """Handle input requests with protocol priority:
         1. message.type == "x_confirm" -> plan acceptance (accepted=true)
@@ -781,7 +941,8 @@ class TaskRunner:
             return
         x_api_authorize_payload = self._get_x_api_authorize_payload(message)
         if x_api_authorize_payload is not None:
-            self._handle_x_api_authorize_message(
+            self._skip_x_api_authorize_message(
+                message,
                 x_api_authorize_payload,
                 options,
                 timestamp,
@@ -867,6 +1028,18 @@ class TaskRunner:
             return
 
         # Priority 3 & 4: store pending_request_id for user/marketing_analyst input
+        if not self._interactive_mode:
+            source = message.get("source", "")
+            self._fail_noninteractive_input(
+                result_container,
+                completion_events,
+                timestamp,
+                (
+                    "User input is required. run_task() cannot continue automatically; "
+                    f"use run_interactive_session() (source={source or 'unknown'})."
+                ),
+            )
+            return
         self._pending_request_id = request_id
         if last_msg_type == MessageType.PLAN and last_plan_sub_type in [
             PlanType.CREATE_PLAN, PlanType.UPDATE_PLAN
