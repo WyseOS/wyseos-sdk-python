@@ -46,6 +46,8 @@ client = Client(load_config("mate.yaml"))
 
 登录与注册都可在**不提供** `api_key`、`jwt_token` 的情况下发起（这些接口在 SDK 中走 `skip_auth`）。无密钥时可用 `Client(ClientOptions())` 使用默认 `base_url`，或仅用 `load_config("mate.yaml")` 配置自定义 `base_url`。
 
+这些都是独立的引导式登录流程，不等于 `TaskRunner` 内的任务期 X 授权恢复。
+
 1. **邮箱 magic link** — 向邮箱发送登录/注册链接，用户在浏览器中打开完成验证：
 
 ```python
@@ -60,7 +62,7 @@ resp = client.user.start_email_verification(
 # resp.sign_type、resp.pre_auth_id — 用户点击邮件内链接后按产品流程续接
 ```
 
-2. **X（Twitter）OAuth** — 获取用于登录/注册的授权 URL，在浏览器中打开完成：
+2. **X（Twitter）OAuth** — 获取独立登录/注册用的授权 URL，在浏览器中打开完成：
 
 ```python
 url_resp = client.user.get_x_oauth_url()
@@ -69,9 +71,13 @@ print(url_resp.auth_url)  # 在浏览器中打开
 
 可运行参考：`examples/auth/auth_example.py`。
 
-## 4. 授权与绑定 X（相关函数）
+如果营销任务在执行过程中需要 X 授权，不要手动调用 `get_x_oauth_url()`。应使用 `run_interactive_session(...)`，SDK 会打印 `x_api_authorize` URL，并在你回到终端按回车后继续同一轮任务。
+
+## 4. 独立的 X（Twitter）账户相关 API
 
 区分两类场景：**账户登录/注册**（无 API 密钥）与**将 X 账号绑定到已有账户**（登录后使用 `api_key` 或 `jwt_token`）。
+
+这些 `UserService` 接口属于低层的独立辅助能力，不是推荐的任务期授权路径。
 
 | 用途 | 调用 | 是否需要已登录 |
 | ---- | ---- | -------------- |
@@ -80,7 +86,7 @@ print(url_resp.auth_url)  # 在浏览器中打开
 | 发起绑定或换绑 X（连接器） | `client.user.authorize_x_account(target_connector_id=None)` | 是；可选 `target_connector_id` 指定要写入的凭据位 |
 | 解绑已连接的 X 账号 | `client.user.delete_x_account(connector_id)` | 是 |
 
-`authorize_x_account` 返回 `OAuthURLResponse`，通过 `auth_url` 在浏览器中完成授权。
+`authorize_x_account` 返回 `OAuthURLResponse`，通过 `auth_url` 在浏览器中完成独立的连接器绑定流程。
 
 可运行参考：`examples/auth/connectors_example.py`。
 
@@ -115,22 +121,21 @@ session_info = client.session.get_info(session.session_id)
 print("session_id:", session.session_id)
 ```
 
-如果需要 X API-only 执行，在 `extra` 中传入 `execution_mode`：
+如果需要 X API-only 执行，应在启动 `TaskRunner` 时显式传入 `execution_mode`：
 
 ```python
-extra = {
-    "execution_mode": "api_only",
-    "marketing_product": {"product_id": "prod_123"},
-}
+from octoevo.mate.task_runner import ExecutionMode
+
+execution_mode = ExecutionMode.ApiOnly
 ```
 
-当需要 X OAuth 授权时，SDK 默认只打印授权 URL。请在浏览器中打开该 URL 完成授权，然后回到终端按回车继续。
+当需要 X OAuth 授权时，`run_interactive_session(...)` 会打印授权 URL，等待你在浏览器中完成授权，然后在回到终端按回车后继续同一轮任务。
 
 ### A2. 运行交互式会话
 
 ```python
 from octoevo.mate import create_task_runner
-from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode
+from octoevo.mate.task_runner import ExecutionMode, TaskExecutionOptions, TaskMode
 from octoevo.mate.websocket import WebSocketClient
 
 ws_client = WebSocketClient(
@@ -147,6 +152,7 @@ task_runner.run_interactive_session(
     attachments=[],
     task_mode=TaskMode.Marketing,
     extra=req.extra,
+    execution_mode=ExecutionMode.ApiOnly,
     options=TaskExecutionOptions(
         auto_accept_plan=False,
         capture_screenshots=False,
@@ -192,6 +198,10 @@ ws_client.send_stop()
 ```
 
 交互式命令行里输入 `stop` 与调用 `send_stop()` 等价：都会通过 WebSocket 发送 `type: "stop"` 的消息。HTTP 的 `stop` 则通过 REST 通知服务端结束该会话。
+
+可运行参考：
+- 基础营销流程：`examples/getting_started/example.py`
+- 全链路 E2E 矩阵回归验证：[`examples/x_capability_e2e/README.md`](x_capability_e2e/README.md)
 
 ---
 
@@ -259,12 +269,12 @@ except ConfigError as e:
 
 ## 7. 相关 API
 
-账户注册（不需要 `api_key` / `jwt_token`）：
+独立账户引导（不需要 `api_key` / `jwt_token`）：
 
 - `client.user.start_email_verification(email, invite_code=None)`
 - `client.user.get_x_oauth_url()`
 
-X 连接器（登录后、带 `api_key` 或 `jwt_token`）：
+独立 X 连接器管理（登录后、带 `api_key` 或 `jwt_token`）：
 
 - `client.user.list_x_accounts()`
 - `client.user.authorize_x_account(target_connector_id=None)`

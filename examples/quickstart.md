@@ -47,6 +47,8 @@ client = Client(load_config("mate.yaml"))
 
 Sign-in and sign-up both start without `api_key` or `jwt_token` on the client (these endpoints use `skip_auth=True`). You can use `Client(ClientOptions())` for the default `base_url`, or `load_config("mate.yaml")` if you only need a custom `base_url`.
 
+These are standalone bootstrap flows. They are separate from task-time X authorization recovery inside `TaskRunner`.
+
 1. **Email magic link** — send a link to the address; the user opens it in a browser to finish sign-in or sign-up:
 
 ```python
@@ -61,7 +63,7 @@ resp = client.user.start_email_verification(
 # resp.sign_type, resp.pre_auth_id — use after the user follows the link per product flow
 ```
 
-2. **X (Twitter) OAuth** — get a login URL; open it in a browser to complete sign-in or sign-up with X:
+2. **X (Twitter) OAuth** — get a standalone login URL; open it in a browser to complete sign-in or sign-up with X:
 
 ```python
 url_resp = client.user.get_x_oauth_url()
@@ -70,9 +72,13 @@ print(url_resp.auth_url)  # open in browser
 
 Runnable reference: `examples/auth/auth_example.py`.
 
-## 4. X (Twitter) Authorization: Functions
+If a marketing task later needs X authorization in the middle of execution, do not call `get_x_oauth_url()` manually. Use `run_interactive_session(...)`; the SDK will print the `x_api_authorize` URL and resume the same task round after you press Enter.
+
+## 4. Standalone X (Twitter) Account APIs
 
 Distinguish **account login/registration** (no API key) from **binding X to an existing account** (requires `api_key` or `jwt_token` after you are signed in).
+
+These `UserService` APIs are low-level standalone helpers. They are not the recommended task-time authorization path.
 
 | Purpose | Call | Auth required |
 | ------- | ---- | ------------- |
@@ -81,7 +87,7 @@ Distinguish **account login/registration** (no API key) from **binding X to an e
 | Bind or re-bind an X account (connector) | `client.user.authorize_x_account(target_connector_id=None)` | Yes; optional `target_connector_id` selects the credential slot |
 | Remove a connected X account | `client.user.delete_x_account(connector_id)` | Yes |
 
-`authorize_x_account` returns an `OAuthURLResponse` with `auth_url` — open that URL in a browser to complete the connector flow.
+`authorize_x_account` returns an `OAuthURLResponse` with `auth_url` — open that URL in a browser to complete the standalone connector flow.
 
 Runnable reference: `examples/auth/connectors_example.py`.
 
@@ -116,22 +122,21 @@ session_info = client.session.get_info(session.session_id)
 print("session_id:", session.session_id)
 ```
 
-For X API-only execution, pass `execution_mode` in `extra`:
+For X API-only execution, pass `execution_mode` explicitly when starting `TaskRunner`:
 
 ```python
-extra = {
-    "execution_mode": "api_only",
-    "marketing_product": {"product_id": "prod_123"},
-}
+from octoevo.mate.task_runner import ExecutionMode
+
+execution_mode = ExecutionMode.ApiOnly
 ```
 
-When X OAuth authorization is required, the SDK prints an authorization URL by default. Open it in a browser, finish authorization, then return to the terminal and press Enter to continue.
+When X OAuth authorization is required, `run_interactive_session(...)` prints an authorization URL, waits for you to finish authorization in a browser, then resumes the same task round after you press Enter.
 
 ### A2. Run Interactive Session
 
 ```python
 from octoevo.mate import create_task_runner
-from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode
+from octoevo.mate.task_runner import ExecutionMode, TaskExecutionOptions, TaskMode
 from octoevo.mate.websocket import WebSocketClient
 
 ws_client = WebSocketClient(
@@ -148,6 +153,7 @@ task_runner.run_interactive_session(
     attachments=[],
     task_mode=TaskMode.Marketing,
     extra=req.extra,
+    execution_mode=ExecutionMode.ApiOnly,
     options=TaskExecutionOptions(
         auto_accept_plan=False,
         capture_screenshots=False,
@@ -193,6 +199,10 @@ ws_client.send_stop()
 ```
 
 In the interactive CLI, typing `stop` is equivalent to `send_stop()`: both send a WebSocket message with `type: "stop"`. The HTTP `stop` endpoint notifies the server to end the session over the REST API.
+
+Runnable references:
+- Basic Marketing Flow: `examples/getting_started/example.py`
+- Live E2E Capability Matrix Verification: [`examples/x_capability_e2e/README.md`](x_capability_e2e/README.md)
 
 ---
 
@@ -260,12 +270,12 @@ except ConfigError as e:
 
 ## 7. Related APIs
 
-Account registration (no `api_key` / `jwt_token` required):
+Standalone account bootstrap (no `api_key` / `jwt_token` required):
 
 - `client.user.start_email_verification(email, invite_code=None)`
 - `client.user.get_x_oauth_url()`
 
-X connector (after sign-in, with `api_key` or `jwt_token`):
+Standalone X connector management (after sign-in, with `api_key` or `jwt_token`):
 
 - `client.user.list_x_accounts()`
 - `client.user.authorize_x_account(target_connector_id=None)`
