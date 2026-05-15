@@ -1,3 +1,19 @@
+## 🚀 Release 0.1.5 (2026-05-15)
+
+This release simplifies the SDK's task runner internals, makes X authorization handling more coherent, and aligns examples with the current execution model.
+
+### ✨ Improvements
+
+- **Simpler `TaskRunner` authorization flow**: X API authorization is now managed through a lightweight internal state object, so the runner has one clear path for authorization-required messages instead of scattered special cases.
+- **Clearer non-interactive closure**: automated runs continue to fail fast when authorization is required, with a consistent recoverable-failure result instead of drifting into mixed runner states.
+- **Lean execution state handling**: redundant internal runner state was removed, including the old marketing chunk buffer path that was not the source of truth for final results.
+
+### 📚 Examples and Docs
+
+- **Updated `getting_started` example**: the main example now uses the explicit `execution_mode` parameter instead of teaching the legacy `extra["execution_mode"]` pattern.
+- **Repositioned auth examples**: low-level X OAuth and connector examples are now described as standalone helper flows, not as the primary in-task authorization path.
+- **Cleaner release surface**: outdated internal planning and protocol draft documents were removed to keep the repository focused on current SDK behavior.
+
 ## 🚀 Release 0.1.2 (2026-05-14)
 
 This release improves the SDK's core session runner behavior for non-interactive environments and makes WebSocket shutdown more reliable.
