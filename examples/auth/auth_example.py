@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """
-Interactive example: pick how to start authentication.
+Standalone auth bootstrap example.
 
 Both flows are unauthenticated (no api_key / jwt_token required):
 
   - Email: sends a magic sign-in link via ``UserService.start_email_verification``.
   - X (Twitter): returns the OAuth URL via ``UserService.get_x_oauth_url``.
+
+This script is intentionally low-level. It does not demonstrate the SDK's
+task-time X authorization recovery. For marketing sessions, use
+``TaskRunner.run_interactive_session()`` and let ``x_api_authorize`` resume the
+current task in the same round.
 
 Copy ``mate.yaml.example`` to ``mate.yaml`` if you want a custom ``base_url``;
 credentials in that file are not needed for this script.
@@ -17,7 +22,7 @@ import os
 
 from octoevo.mate import Client, ClientOptions
 from octoevo.mate.config import load_config
-from octoevo.mate.errors import APIError
+from octoevo.mate.errors import APIError, NetworkError
 
 
 def create_client() -> Client:
@@ -26,8 +31,12 @@ def create_client() -> Client:
     config_path = os.path.join(script_dir, "mate.yaml")
 
     if os.path.exists(config_path):
-        print(f"Loading config: {config_path}")
-        return Client(load_config(config_path))
+        try:
+            print(f"Loading config: {config_path}")
+            return Client(load_config(config_path))
+        except Exception as exc:
+            print(f"Failed to load config: {exc}")
+            print("Falling back to default base_url without credentials.")
 
     print("No mate.yaml found, using default base_url without credentials.")
     return Client(ClientOptions())
@@ -47,7 +56,7 @@ def run_email_flow(client: Client) -> None:
             email=email,
             invite_code=invite_code,
         )
-    except APIError as exc:
+    except (APIError, NetworkError) as exc:
         print(f"Request failed: {exc}")
         return
 
@@ -62,39 +71,42 @@ def run_email_flow(client: Client) -> None:
 def run_twitter_oauth_flow(client: Client) -> None:
     try:
         resp = client.user.get_x_oauth_url()
-    except APIError as exc:
+    except (APIError, NetworkError) as exc:
         print(f"Request failed: {exc}")
         return
 
-    print("\nX (Twitter) OAuth authorization URL:")
+    print("\nStandalone X (Twitter) login OAuth URL:")
     print(resp.auth_url)
     print(
-        "\nOpen the URL in a browser to finish login. The backend redirects to "
-        "the configured webapp host."
+        "\nOpen the URL in a browser to finish standalone login or sign-up. "
+        "This flow is separate from task-time x_api_authorize recovery."
     )
 
 
 def print_menu() -> None:
-    print("\n=== Choose auth method ===")
+    print("\n=== Standalone Auth Bootstrap ===")
     print("1) Email — send verify link for sign-in / sign-up")
-    print("2) X (Twitter) — get OAuth login URL")
+    print("2) X (Twitter) — get standalone OAuth login URL")
     print("q) Quit")
 
 
 def main() -> None:
     client = create_client()
 
-    while True:
-        print_menu()
-        choice = input("Choice: ").strip().lower()
-        if choice == "q":
-            break
-        if choice == "1":
-            run_email_flow(client)
-        elif choice == "2":
-            run_twitter_oauth_flow(client)
-        else:
-            print("Unknown option.")
+    try:
+        while True:
+            print_menu()
+            choice = input("Choice: ").strip().lower()
+            if choice == "q":
+                break
+            if choice == "1":
+                run_email_flow(client)
+            elif choice == "2":
+                run_twitter_oauth_flow(client)
+            else:
+                print("Unknown option.")
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Exiting.")
 
 
 if __name__ == "__main__":

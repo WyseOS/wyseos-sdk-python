@@ -5,12 +5,16 @@ Minimal marketing example for Python SDK.
 
 import logging
 import os
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from octoevo.mate import Client, create_task_runner
 from octoevo.mate.config import load_config
 from octoevo.mate.models import CreateSessionRequest
-from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode
+from octoevo.mate.task_runner import (
+    ExecutionMode,
+    TaskExecutionOptions,
+    TaskMode,
+)
 from octoevo.mate.websocket import WebSocketClient
 
 logging.basicConfig(
@@ -29,6 +33,20 @@ DEFAULT_MARKETING_SKILLS: List[Dict[str, str]] = [
 CLI_SAFE_EXTRA_INSTRUCTION = "Only generate content. Do not perform any browser actions such as posting, liking, or retweeting."
 
 
+def read_task() -> str:
+    print("Enter TASK. Finish with a single '.' line:")
+    lines: List[str] = []
+    while True:
+        try:
+            line = input()
+        except EOFError:
+            break
+        if line == ".":
+            break
+        lines.append(line)
+    return "\n".join(lines).strip()
+
+
 def create_client() -> Client | None:
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(script_dir, "mate.yaml")
@@ -43,12 +61,23 @@ def create_client() -> Client | None:
 
 def build_extra(product_id: str) -> Dict:
     extra = {"skills": DEFAULT_MARKETING_SKILLS}
-    execution_mode = os.getenv("MATE_X_EXECUTION_MODE", "").strip()
-    if execution_mode:
-        extra["execution_mode"] = execution_mode
     if product_id:
         extra["marketing_product"] = {"product_id": product_id}
     return extra
+
+
+def resolve_execution_mode() -> Optional[ExecutionMode]:
+    raw = os.getenv("MATE_X_EXECUTION_MODE", "").strip()
+    if not raw:
+        return None
+    try:
+        return ExecutionMode(raw)
+    except ValueError:
+        print(
+            "Unsupported MATE_X_EXECUTION_MODE. "
+            "Expected one of: auto, api_only, extension_only."
+        )
+        return None
 
 
 def main():
@@ -56,7 +85,7 @@ def main():
     if not client:
         return
 
-    task = input("Enter TASK: ").strip()
+    task = read_task()
     if not task:
         print("TASK is required")
         return
@@ -64,6 +93,9 @@ def main():
 
     product_id = input("Enter PRODUCT_ID (optional): ").strip()
     extra = build_extra(product_id)
+    execution_mode = resolve_execution_mode()
+    if os.getenv("MATE_X_EXECUTION_MODE", "").strip() and execution_mode is None:
+        return
 
     req = CreateSessionRequest(
         task=task,
@@ -96,6 +128,7 @@ def main():
         initial_task=task,
         task_mode=TaskMode.Marketing,
         extra=extra,
+        execution_mode=execution_mode,
         options=options,
     )
 

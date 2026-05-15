@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Example: manage X (Twitter) connector accounts.
+Legacy low-level example: manage X (Twitter) connector accounts.
 
 Demonstrates the three X-connector endpoints on UserService:
   - list_x_accounts()        -> GET /connectors/v1/x/accounts
@@ -8,6 +8,11 @@ Demonstrates the three X-connector endpoints on UserService:
   - delete_x_account(id)     -> DELETE /connectors/v1/x/accounts/{id}
 
 Requires a valid api_key (or jwt_token) in mate.yaml.
+
+This script is for standalone connector management only. It is not the
+recommended task-time authorization path. For in-task X authorization recovery,
+use ``TaskRunner.run_interactive_session()`` and let the SDK resume the same
+task round after ``x_api_authorize``.
 """
 
 import os
@@ -15,7 +20,7 @@ from typing import Optional
 
 from octoevo.mate import Client
 from octoevo.mate.config import load_config
-from octoevo.mate.errors import APIError
+from octoevo.mate.errors import APIError, NetworkError
 
 
 def create_client() -> Optional[Client]:
@@ -31,9 +36,9 @@ def create_client() -> Optional[Client]:
 
 
 def print_menu() -> None:
-    print("\n=== X Connector Menu ===")
+    print("\n=== Legacy X Connector Menu ===")
     print("1) List connected X accounts")
-    print("2) Authorize a new / existing X account")
+    print("2) Authorize a connector account (standalone binding URL)")
     print("3) Delete a connected X account")
     print("q) Quit")
 
@@ -41,7 +46,7 @@ def print_menu() -> None:
 def do_list(client: Client) -> None:
     try:
         result = client.user.list_x_accounts()
-    except APIError as exc:
+    except (APIError, NetworkError) as exc:
         print(f"List failed: {exc}")
         return
 
@@ -51,9 +56,10 @@ def do_list(client: Client) -> None:
 
     print(f"Connected X accounts ({len(result.items)}):")
     for idx, account in enumerate(result.items, start=1):
+        username = f"@{account.external_username}" if account.external_username else "-"
         print(
             f"  {idx}. connector_id={account.connector_id} "
-            f"username=@{account.external_username} "
+            f"username={username} "
             f"status={account.status} "
             f"expires_at={account.expires_at}"
         )
@@ -67,11 +73,11 @@ def do_authorize(client: Client) -> None:
         resp = client.user.authorize_x_account(
             target_connector_id=target or None,
         )
-    except APIError as exc:
+    except (APIError, NetworkError) as exc:
         print(f"Authorize failed: {exc}")
         return
 
-    print("Open this URL in a browser to complete the binding:")
+    print("Open this URL in a browser to complete the standalone connector binding:")
     print(resp.auth_url)
 
 
@@ -83,7 +89,7 @@ def do_delete(client: Client) -> None:
 
     try:
         client.user.delete_x_account(connector_id)
-    except APIError as exc:
+    except (APIError, NetworkError) as exc:
         print(f"Delete failed: {exc}")
         return
 
@@ -101,16 +107,19 @@ def main() -> None:
         "3": do_delete,
     }
 
-    while True:
-        print_menu()
-        choice = input("Choose an action: ").strip().lower()
-        if choice == "q":
-            break
-        action = actions.get(choice)
-        if action is None:
-            print("Unknown option.")
-            continue
-        action(client)
+    try:
+        while True:
+            print_menu()
+            choice = input("Choose an action: ").strip().lower()
+            if choice == "q":
+                break
+            action = actions.get(choice)
+            if action is None:
+                print("Unknown option.")
+                continue
+            action(client)
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Exiting.")
 
 
 if __name__ == "__main__":
