@@ -213,7 +213,7 @@ class WebSocketClient:
                 else:
                     logger.warning("Error during WebSocket shutdown: %s", e)
                 if close_future:
-                    close_future.cancel()
+                    self._cancel_close_future(close_future)
                 self._abort_websocket_transport()
         elif self.websocket:
             self._abort_websocket_transport()
@@ -231,6 +231,18 @@ class WebSocketClient:
         self.loop = None
         self.thread = None
         logger.debug("disconnect finished in %.2fs", time.time() - started_at)
+
+    def _cancel_close_future(self, future) -> None:
+        loop = self.loop
+        if future.done() or not loop or loop.is_closed():
+            return
+        try:
+            loop.call_soon_threadsafe(future.cancel)
+        except Exception as exc:
+            if _is_benign_disconnect_error(exc):
+                logger.debug("WebSocket shutdown future cancel skipped")
+                return
+            logger.warning("Failed to cancel WebSocket shutdown future: %s", exc)
 
     def send_message(self, message: Union[Dict[str, Any], UserTaskMessage]) -> None:
         if not self.is_connected or not self.websocket:

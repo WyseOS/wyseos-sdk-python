@@ -132,10 +132,13 @@ def build_seed_task_prompt(
         raise ValueError("MATE_E2E_TARGET_TWEET_URL is required for interact scenarios")
     return (
         f"{header}\n"
-        f"Create exactly one pending interaction record for this tweet: {target_tweet_url}\n"
-        "The interaction type must be either like or retweet.\n"
-        "Save it as the current session interaction record.\n"
-        "Do not execute the interaction yet.\n"
+        f"Find exactly one X post suitable for account nurturing{product_clause}.\n"
+        "Save it as pending current session marketing interaction data.\n"
+        "The pending interaction action must be like or retweet.\n"
+        f"The target tweet URL is only a hint for topic and style: {target_tweet_url}\n"
+        "If that exact tweet cannot be saved as pending interaction data, choose one suitable recommended tweet instead.\n"
+        "Do not call like_and_retweet or any other execution batch during this seed step.\n"
+        "Do not execute the interaction during this seed step.\n"
         "Do not reply.\n"
         f"{guard}"
     )

@@ -505,7 +505,8 @@ class TaskRunner:
 
                     if self._pending_input_type == InputType.PLAN:
                         resp = WebSocketClient.create_plan_acceptance_response(
-                            self._pending_request_id
+                            self._pending_request_id,
+                            self._latest_plan_steps_for_acceptance(),
                         )
                     else:
                         resp = WebSocketClient.create_text_input_response(
@@ -936,7 +937,10 @@ class TaskRunner:
             PlanType.CREATE_PLAN, PlanType.UPDATE_PLAN
         ] and options.auto_accept_plan:
             try:
-                resp = WebSocketClient.create_plan_acceptance_response(request_id)
+                resp = WebSocketClient.create_plan_acceptance_response(
+                    request_id,
+                    self._latest_plan_steps_for_acceptance(),
+                )
                 self.ws_client.send_message(resp)
                 self._clear_pending_input_state()
                 if options.verbose:
@@ -978,6 +982,21 @@ class TaskRunner:
                 f"Awaiting user input (source={source}, request_id={request_id}, input_type={self._pending_input_type})",
                 timestamp,
             )
+
+    def _latest_plan_steps_for_acceptance(self) -> List[Dict[str, Any]]:
+        for msg in reversed(self._raw_messages):
+            if msg.get("type") != MessageType.PLAN:
+                if msg.get("type") not in [MessageType.PING, MessageType.PONG, MessageType.WARNING]:
+                    break
+                continue
+            inner = msg.get("message", {})
+            if not isinstance(inner, dict):
+                return []
+            data = inner.get("data")
+            if isinstance(data, list):
+                return data
+            return []
+        return []
 
     def _handle_rich_message(
         self,

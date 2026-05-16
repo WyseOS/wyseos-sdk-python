@@ -1,3 +1,18 @@
+## 🚀 Release 0.1.6 (2026-05-16)
+
+This release tightens automated marketing execution, fixes noisy WebSocket shutdown races, and makes the X capability E2E runner better reflect the API-first interact flow.
+
+### ✨ Improvements
+
+- **Plan acceptance preserves replan steps**: automatic and interactive plan acceptance now sends the latest plan payload back to the server, so replan flows keep their assigned steps instead of accepting an empty plan.
+- **Quieter WebSocket teardown**: disconnect cancellation now runs through the WebSocket event loop when possible, avoiding `RuntimeError: Event loop is closed` callback noise during normal shutdown.
+- **Correct persona skill ID**: marketing examples now use the full persona skill identifier.
+
+### 🧪 E2E Coverage
+
+- **More reliable X interact seeding**: interact scenarios now ask for pending account-nurturing interaction data instead of trying to execute or save a fixed URL directly.
+- **Seed-stage batch handling**: the E2E runner no longer treats `Marketing batch completed:` as a seed-stage terminal marker, allowing agent replans and retries to finish preparing data.
+
 ## 🚀 Release 0.1.5 (2026-05-15)
 
 This release simplifies the SDK's task runner internals, makes X authorization handling more coherent, and aligns examples with the current execution model.
