@@ -21,6 +21,7 @@ octoevo-env/
 
 # Logs
 *.log
+examples/x_capability_e2e/results/
 
 # Configuration files
 mate.yaml

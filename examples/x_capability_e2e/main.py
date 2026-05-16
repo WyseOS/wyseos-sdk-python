@@ -79,6 +79,9 @@ def _write_report(
 def main() -> int:
     args = _parse_args()
     has_filter = any((args.scenario, args.environment, args.capability, args.task_type))
+    if args.all and has_filter:
+        print("--all cannot be combined with other filters.", file=sys.stderr)
+        return 2
     if not args.all and not has_filter:
         print("Specify --all or at least one filter.", file=sys.stderr)
         return 2

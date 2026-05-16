@@ -82,30 +82,130 @@ def build_task_prompt(
     publish_text_prefix: str,
     target_tweet_url: Optional[str],
 ) -> str:
+    return build_execute_task_prompt(
+        scenario=scenario,
+        run_id=run_id,
+        nonce=nonce,
+        publish_text_prefix=publish_text_prefix,
+        target_tweet_url=target_tweet_url,
+    )
+
+
+def build_seed_task_prompt(
+    scenario: Scenario,
+    run_id: str,
+    nonce: str,
+    publish_text_prefix: str,
+    target_tweet_url: Optional[str],
+    product_name: Optional[str],
+) -> str:
     marker = f"{run_id} {nonce}"
-    header = (
-        f"Run ID: {run_id}\n"
-        f"Nonce: {nonce}\n\n"
-        "Do not ask for additional confirmation unless the system requires authorization.\n"
+    header = f"Run ID: {run_id}\nNonce: {nonce}\n\n"
+    product_clause = f" about {product_name}" if product_name else ""
+    guard = (
+        "\nDo not analyze the product."
+        "\nDo not create a strategy, campaign, or multi-step plan."
+        "\nDo not ask follow-up questions."
+        "\nFinish immediately after the draft or record is saved."
     )
     if scenario.task_type == "reply":
         if not target_tweet_url:
             raise ValueError("MATE_E2E_TARGET_TWEET_URL is required for reply scenarios")
         return (
             f"{header}\n"
-            f"Use the configured X account to reply to this tweet: {target_tweet_url}\n"
-            f"The reply must include this exact run id and nonce: {marker}."
+            f"Write exactly one reply draft{product_clause} for this tweet: {target_tweet_url}\n"
+            "Save it as the current session reply draft.\n"
+            "Do not publish the reply.\n"
+            f"The reply draft must include this exact run id and nonce: {marker}."
+            f"{guard}"
         )
     if scenario.task_type == "publish":
         return (
             f"{header}\n"
-            "Use the configured X account to publish one short test tweet.\n"
-            f"The tweet text must include: {publish_text_prefix} {marker}."
+            f"Write exactly one short tweet draft{product_clause}.\n"
+            "Save it as the current session tweet draft.\n"
+            "Do not publish the tweet.\n"
+            f"The draft text must include: {publish_text_prefix} {marker}."
+            f"{guard}"
         )
     if not target_tweet_url:
         raise ValueError("MATE_E2E_TARGET_TWEET_URL is required for interact scenarios")
     return (
         f"{header}\n"
-        f"Use the configured X account to interact with this tweet: {target_tweet_url}\n"
-        "Perform one available interaction such as like or retweet."
+        f"Create exactly one pending interaction record for this tweet: {target_tweet_url}\n"
+        "The interaction type must be either like or retweet.\n"
+        "Save it as the current session interaction record.\n"
+        "Do not execute the interaction yet.\n"
+        "Do not reply.\n"
+        f"{guard}"
     )
+
+
+def build_reply_browser_seed_task_prompt(
+    run_id: str,
+    nonce: str,
+    target_tweet_url: str,
+    product_name: Optional[str],
+) -> str:
+    marker = f"{run_id} {nonce}"
+    header = f"Run ID: {run_id}\nNonce: {nonce}\n\n"
+    product_clause = f" about {product_name}" if product_name else ""
+    return (
+        f"{header}\n"
+        f"Open this exact tweet in the browser: {target_tweet_url}\n"
+        f"Write exactly one reply draft{product_clause} using the tweet that is visible on the page.\n"
+        "Save it as the current session reply draft.\n"
+        "Do not publish the reply.\n"
+        "Do not use marketing batch tools.\n"
+        f"The reply draft must include this exact run id and nonce: {marker}.\n"
+        "Do not analyze the product.\n"
+        "Do not create a strategy, campaign, or multi-step plan.\n"
+        "Do not ask follow-up questions.\n"
+        "Finish immediately after the draft or record is saved."
+    )
+
+
+def build_execute_task_prompt(
+    scenario: Scenario,
+    run_id: str,
+    nonce: str,
+    publish_text_prefix: str,
+    target_tweet_url: Optional[str],
+) -> str:
+    marker = f"{run_id} {nonce}"
+    header = f"Run ID: {run_id}\nNonce: {nonce}\n\n"
+    if scenario.task_type == "reply":
+        return (
+            f"{header}\n"
+            "Publish the existing reply draft already saved in this session.\n"
+            "Do not write a new reply.\n"
+            "Do not ask for additional confirmation unless the system requires authorization.\n"
+            f"Use the reply draft that includes: {marker}."
+        )
+    if scenario.task_type == "publish":
+        return (
+            f"{header}\n"
+            "Publish the existing tweet draft already saved in this session.\n"
+            "Do not write a new tweet.\n"
+            "Do not ask for additional confirmation unless the system requires authorization.\n"
+            f"Use the tweet draft that includes: {publish_text_prefix} {marker}."
+        )
+    return (
+        f"{header}\n"
+        "Execute the existing interaction record already saved in this session.\n"
+        "Do not search for new tweets.\n"
+        "Do not create a new interaction plan.\n"
+        "Do not ask for additional confirmation unless the system requires authorization.\n"
+        "Perform the prepared interaction only."
+    )
+
+
+def marketing_data_counts_for(scenario: Scenario, data_by_type: dict[str, dict]) -> dict[str, int]:
+    if scenario.task_type == "reply":
+        return {"reply": len(data_by_type["reply"].get("reply", []))}
+    if scenario.task_type == "publish":
+        return {"tweet": len(data_by_type["tweet"].get("tweet", []))}
+    return {
+        "like": len(data_by_type["like"].get("like", [])),
+        "retweet": len(data_by_type["retweet"].get("retweet", [])),
+    }
