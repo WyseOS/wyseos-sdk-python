@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Keep JS-aligned default skills for reusable marketing demo.
 DEFAULT_MARKETING_SKILLS: List[Dict[str, str]] = [
     {
-        "skill_id": "7ccfb3d7-e6ac-4cda-bce3-030768ef9a9",
+        "skill_id": "7ccfb3d7-e6ac-4cda-bce3-030768ef9a9f",
         "skill_name": "persona",
     }
 ]

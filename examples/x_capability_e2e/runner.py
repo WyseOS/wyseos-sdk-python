@@ -35,11 +35,18 @@ from octoevo.mate.websocket import WebSocketClient
 
 DEFAULT_MARKETING_SKILLS = [
     {
-        "skill_id": "7ccfb3d7-e6ac-4cda-bce3-030768ef9a9",
+        "skill_id": "7ccfb3d7-e6ac-4cda-bce3-030768ef9a9f",
         "skill_name": "persona",
     }
 ]
 SEED_TIMEOUT_FLOOR_SECONDS = 180
+MARKETING_BATCH_COMPLETED_PREFIX = "Marketing batch completed:"
+
+
+def should_stop_on_marketing_batch(content: str, stream_label: str) -> bool:
+    if not content.startswith(MARKETING_BATCH_COMPLETED_PREFIX):
+        return False
+    return stream_label != "seed"
 
 
 class E2ETaskRunner(TaskRunner):
@@ -192,7 +199,7 @@ class E2ETaskRunner(TaskRunner):
             completion_events["error"].set()
             return
 
-        if content.startswith("Marketing batch completed:"):
+        if should_stop_on_marketing_batch(content, self._stream_label):
             result_container["final_answer"] = content
             result_container["task_completed"] = True
             result_container["task_completed_at"] = time.time()
