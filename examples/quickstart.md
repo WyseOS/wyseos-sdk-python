@@ -1,20 +1,23 @@
 [English](quickstart.md) | [中文](quickstart_cn.md)
 
-# Quick Start Guide
+# OctoEvo Python SDK Quick Start
 
-This SDK has **two independent scenarios**:
+Use this guide to run the two supported SDK workflows:
 
-* **Marketing (WebSocket + Session APIs)**
+- **Marketing session**: WebSocket-based interactive task execution for tweet, reply, like, and retweet workflows.
+- **Product analysis**: HTTP API workflow for creating a product analysis job, polling status, and reading the final report.
 
-    For interactive generation loops (tweet/reply/like/retweet flows).
+Keep these workflows separate. Marketing tasks use `TaskRunner`; product analysis uses `client.product`.
 
-* **Product Analysis (HTTP Polling + Product APIs)** 
+## Requirements
 
-    For create-product, poll status, and get final report.
+- Python 3.9+
+- An OctoEvo `api_key` or `jwt_token`
+- `pip install octoevo`
 
-They are separate entry points and should not be mixed.
+Never commit real credentials. Put local secrets in `mate.yaml`, environment-specific secret storage, or your CI secret manager.
 
-## 1. Setup
+## Install
 
 ```bash
 python -m venv .venv
@@ -22,19 +25,19 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install octoevo
 ```
 
-## 2. Configure Client
+## Configure
 
 Create `mate.yaml`:
 
 ```yaml
 mate:
   api_key: "your-api-key"
-  # or jwt_token: "your-jwt-token"
+  # jwt_token: "your-jwt-token"
   base_url: "https://api.dev.weclaw.ai"
   timeout: 30
 ```
 
-Initialize:
+Initialize the client:
 
 ```python
 from octoevo.mate import Client
@@ -43,72 +46,21 @@ from octoevo.mate.config import load_config
 client = Client(load_config("mate.yaml"))
 ```
 
-## 3. Register an Account (Two Ways)
+## Workflow A: Marketing Session
 
-Sign-in and sign-up both start without `api_key` or `jwt_token` on the client (these endpoints use `skip_auth=True`). You can use `Client(ClientOptions())` for the default `base_url`, or `load_config("mate.yaml")` if you only need a custom `base_url`.
-
-These are standalone bootstrap flows. They are separate from task-time X authorization recovery inside `TaskRunner`.
-
-1. **Email magic link** — send a link to the address; the user opens it in a browser to finish sign-in or sign-up:
+Marketing tasks default to `execution_mode="auto"` in `TaskRunner`. Do not pass `external_user_id` or `external_username`; the agent chooses the execution channel and asks for X authorization, X account selection, or browser extension connection only when required.
 
 ```python
-from octoevo.mate import Client, ClientOptions
-
-client = Client(ClientOptions())  # or load_config("mate.yaml") without credentials
-
-resp = client.user.start_email_verification(
-    email="you@example.com",
-    invite_code=None,  # optional invite code
-)
-# resp.sign_type, resp.pre_auth_id — use after the user follows the link per product flow
-```
-
-2. **X (Twitter) OAuth** — get a standalone login URL; open it in a browser to complete sign-in or sign-up with X:
-
-```python
-url_resp = client.user.get_x_oauth_url()
-print(url_resp.auth_url)  # open in browser
-```
-
-Runnable reference: `examples/auth/auth_example.py`.
-
-If a marketing task later needs X authorization in the middle of execution, do not call `get_x_oauth_url()` manually. Use `run_interactive_session(...)`; the SDK will print the `x_api_authorize` URL and resume the same task round after you press Enter.
-
-## 4. Standalone X (Twitter) Account APIs
-
-Distinguish **account login/registration** (no API key) from **binding X to an existing account** (requires `api_key` or `jwt_token` after you are signed in).
-
-These `UserService` APIs are low-level standalone helpers. They are not the recommended task-time authorization path.
-
-| Purpose | Call | Auth required |
-| ------- | ---- | ------------- |
-| Sign in / sign up with X | `client.user.get_x_oauth_url()` | No |
-| List connected X accounts | `client.user.list_x_accounts()` | Yes |
-| Bind or re-bind an X account (connector) | `client.user.authorize_x_account(target_connector_id=None)` | Yes; optional `target_connector_id` selects the credential slot |
-| Remove a connected X account | `client.user.delete_x_account(connector_id)` | Yes |
-
-`authorize_x_account` returns an `OAuthURLResponse` with `auth_url` — open that URL in a browser to complete the standalone connector flow.
-
-Runnable reference: `examples/auth/connectors_example.py`.
-
-## 5. Choose One Workflow
-
-| Workflow          | Entry Point                                              | Transport    | Main Output                                |
-| ----------------- | -------------------------------------------------------- | ------------ | ------------------------------------------ |
-| Marketing Session | `create_task_runner(...).run_interactive_session(...)` | WebSocket    | Streamed session messages + marketing data |
-| Product Analysis  | `client.product.create_and_wait(...)`                  | HTTP polling | `ProductReport`                          |
-
----
-
-## A) Marketing Session (Independent Flow)
-
-### A1. Create Session
-
-```python
+from octoevo.mate import Client, create_task_runner
+from octoevo.mate.config import load_config
 from octoevo.mate.models import CreateSessionRequest
+from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode
+from octoevo.mate.websocket import WebSocketClient
+
+client = Client(load_config("mate.yaml"))
 
 req = CreateSessionRequest(
-    task="Create a marketing tweet thread for my product",
+    task="Draft a launch thread for my product",
     mode="marketing",
     platform="api",
     extra={
@@ -119,25 +71,6 @@ req = CreateSessionRequest(
 
 session = client.session.create(req)
 session_info = client.session.get_info(session.session_id)
-print("session_id:", session.session_id)
-```
-
-For X API-only execution, pass `execution_mode` explicitly when starting `TaskRunner`:
-
-```python
-from octoevo.mate.task_runner import ExecutionMode
-
-execution_mode = ExecutionMode.ApiOnly
-```
-
-When X OAuth authorization is required, `run_interactive_session(...)` prints an authorization URL, waits for you to finish authorization in a browser, then resumes the same task round after you press Enter.
-
-### A2. Run Interactive Session
-
-```python
-from octoevo.mate import create_task_runner
-from octoevo.mate.task_runner import ExecutionMode, TaskExecutionOptions, TaskMode
-from octoevo.mate.websocket import WebSocketClient
 
 ws_client = WebSocketClient(
     base_url=client.base_url,
@@ -146,17 +79,13 @@ ws_client = WebSocketClient(
     session_id=session_info.session_id,
 )
 
-task_runner = create_task_runner(ws_client, client, session_info)
-
-task_runner.run_interactive_session(
+runner = create_task_runner(ws_client, client, session_info)
+runner.run_interactive_session(
     initial_task="Generate 3 tweet drafts and recommended replies",
-    attachments=[],
     task_mode=TaskMode.Marketing,
     extra=req.extra,
-    execution_mode=ExecutionMode.ApiOnly,
     options=TaskExecutionOptions(
         auto_accept_plan=False,
-        capture_screenshots=False,
         verbose=True,
         stop_on_x_confirm=True,
         completion_timeout=600,
@@ -164,134 +93,123 @@ task_runner.run_interactive_session(
 )
 ```
 
-### A3. Read Marketing Data
+Use `stop_on_x_confirm=True` for a safe CLI default: the session stops instead of confirming a live social action. Set it to `False` only when your application is expected to confirm execution automatically.
+
+During `run_interactive_session()`, the SDK handles these structured prompts:
+
+| Prompt | Meaning | SDK behavior |
+| --- | --- | --- |
+| `x_api_authorize` | X API authorization is required | Prints the authorization URL, then resumes after you press Enter |
+| `x_api_account_select` | Multiple X accounts are connected | Shows account choices and sends the selected account for this session |
+| `extension_required` | Browser extension is required | Prints the extension connection URL and waits for acknowledgement |
+
+After the session, read generated marketing data:
 
 ```python
-reply_data = client.session.get_marketing_data(session.session_id, type="reply")
-like_data = client.session.get_marketing_data(session.session_id, type="like")
-retweet_data = client.session.get_marketing_data(session.session_id, type="retweet")
 tweet_data = client.session.get_marketing_data(session.session_id, type="tweet")
+reply_data = client.session.get_marketing_data(session.session_id, type="reply")
 
-print(len(reply_data.get("reply", [])), "replies")
 print(len(tweet_data.get("tweet", [])), "draft tweets")
+print(len(reply_data.get("reply", [])), "replies")
 ```
 
-Interactive commands:
+Runnable example: [`getting_started/example.py`](getting_started/example.py)
 
-- `stop` -> send stop message
-- `pause` -> send pause message
-- `exit` / `quit` / `q` -> leave session
+## Workflow B: Product Analysis
 
-### A4. Stop Session (HTTP or WebSocket)
-
-You can stop a running session in two ways:
-
-1. **HTTP API** — no WebSocket required; use the same `session_id` you created earlier:
+Product analysis is pure HTTP. It does not use WebSocket or `TaskRunner`.
 
 ```python
-client.session.stop(session.session_id)
+from octoevo.mate import Client
+from octoevo.mate.config import load_config
+
+client = Client(load_config("mate.yaml"))
+
+report = client.product.create_and_wait(
+    product="Notion",  # product name or URL
+    attachments=None,
+    on_poll=lambda attempt, status: print(f"[poll {attempt}] {status}"),
+)
+
+print("report_id:", report.report_id)
+print("product_name:", report.product_name)
+print("keywords:", report.keywords)
+print("competitors:", report.competitors)
 ```
 
-2. **WebSocket** — while connected:
-
-```python
-ws_client.send_stop()
-```
-
-In the interactive CLI, typing `stop` is equivalent to `send_stop()`: both send a WebSocket message with `type: "stop"`. The HTTP `stop` endpoint notifies the server to end the session over the REST API.
-
-Runnable references:
-- Basic Marketing Flow: `examples/getting_started/example.py`
-- Live E2E Capability Matrix Verification: [`examples/x_capability_e2e/README.md`](x_capability_e2e/README.md)
-
----
-
-## B) Product Analysis (Independent Flow)
-
-### B1. Optional: Upload Attachments
-
-Use upload response as the source of truth for `attachments`:
+For attachments, upload files first and pass the upload response values:
 
 ```python
 upload = client.file_upload.upload_file("brief.pdf")
 attachments = [{"file_name": upload["file_name"], "file_url": upload["file_url"]}]
-```
 
-### B2. One-shot API (Recommended)
-
-```python
 report = client.product.create_and_wait(
-    product="Notion",      # product name or URL
-    attachments=attachments,  # can be None
-    poll_interval=20,      # default
-    max_attempts=30,       # default: 10 minutes
+    product="Notion",
+    attachments=attachments,
 )
-
-print("report_id:", report.report_id)
-print("status:", report.status)
-print("product_name:", report.product_name)
 ```
 
-### B3. Step-by-step API
+Runnable example: [`product_analysis/example.py`](product_analysis/example.py)
+
+## Optional: Account Bootstrap
+
+These helpers are standalone account flows. They are not needed inside normal marketing task execution.
 
 ```python
-from octoevo.mate.models import CreateProductRequest
+from octoevo.mate import Client, ClientOptions
 
-created = client.product.create(
-    CreateProductRequest(product="Notion", attachments=attachments)
+client = Client(ClientOptions())
+
+email_resp = client.user.start_email_verification(
+    email="you@example.com",
+    invite_code=None,
 )
-info = client.product.get_info(created.product_id)
+print(email_resp.sign_type, email_resp.pre_auth_id)
 
-if info.analysis_result and info.analysis_result.report_id:
-    report = client.product.get_report(info.analysis_result.report_id)
+x_login = client.user.get_x_oauth_url()
+print(x_login.auth_url)
 ```
 
-Runnable example: `examples/product_analysis/example.py`.
-
----
-
-## 6. Error Handling
+Low-level X connector management requires an authenticated client:
 
 ```python
-from octoevo.mate.errors import APIError, NetworkError, ConfigError, WebSocketError
+accounts = client.user.list_x_accounts()
+auth = client.user.authorize_x_account(target_connector_id=None)
+print(len(accounts.items), auth.auth_url)
+
+client.user.delete_x_account("connector-id")
+```
+
+Use these connector APIs only for account administration. Do not use them to choose a task execution account; `run_interactive_session()` handles task-time authorization and account selection.
+
+Runnable examples:
+
+- [`auth/auth_example.py`](auth/auth_example.py)
+- [`auth/connectors_example.py`](auth/connectors_example.py)
+
+## Error Handling
+
+```python
+from octoevo.mate.errors import APIError, ConfigError, NetworkError, WebSocketError
 
 try:
-    # your SDK calls
+    # SDK calls
     pass
-except APIError as e:
-    print("APIError:", e)
-except WebSocketError as e:
-    print("WebSocketError:", e)
-except NetworkError as e:
-    print("NetworkError:", e)
-except ConfigError as e:
-    print("ConfigError:", e)
+except APIError as exc:
+    print("API error:", exc)
+except WebSocketError as exc:
+    print("WebSocket error:", exc)
+except NetworkError as exc:
+    print("Network error:", exc)
+except ConfigError as exc:
+    print("Config error:", exc)
 ```
 
-## 7. Related APIs
+For marketing tasks that may need user input, prefer `run_interactive_session()`. Non-interactive `run_task()` fails safely when authorization, account selection, or browser extension connection is required.
 
-Standalone account bootstrap (no `api_key` / `jwt_token` required):
+## More References
 
-- `client.user.start_email_verification(email, invite_code=None)`
-- `client.user.get_x_oauth_url()`
-
-Standalone X connector management (after sign-in, with `api_key` or `jwt_token`):
-
-- `client.user.list_x_accounts()`
-- `client.user.authorize_x_account(target_connector_id=None)`
-- `client.user.delete_x_account(connector_id)`
-
-Marketing:
-
-- `client.session.stop(session_id)`
-- `client.session.get_marketing_data(...)`
-- `client.marketing.update_report(report_id, data)`
-- `client.marketing.get_research_tweets(query_id)`
-
-Product analysis:
-
-- `client.product.create(request)`
-- `client.product.create_and_wait(product, attachments=None, ...)`
-- `client.product.get_info(product_id)`
-- `client.product.get_report(report_id)`
-- `client.product.get_categories()`
+- Main README: [`../README.md`](../README.md)
+- Installation: [`../installation.md`](../installation.md)
+- Marketing example: [`getting_started/example.py`](getting_started/example.py)
+- Product analysis example: [`product_analysis/example.py`](product_analysis/example.py)

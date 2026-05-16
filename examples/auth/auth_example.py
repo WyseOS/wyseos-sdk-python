@@ -7,10 +7,11 @@ Both flows are unauthenticated (no api_key / jwt_token required):
   - Email: sends a magic sign-in link via ``UserService.start_email_verification``.
   - X (Twitter): returns the OAuth URL via ``UserService.get_x_oauth_url``.
 
-This script is intentionally low-level. It does not demonstrate the SDK's
-task-time X authorization recovery. For marketing sessions, use
-``TaskRunner.run_interactive_session()`` and let ``x_api_authorize`` resume the
-current task in the same round.
+This script is intentionally low-level. It does not prepare X accounts for
+marketing task execution and it should not be used to pass account identifiers
+into tasks. For marketing sessions, use ``TaskRunner.run_interactive_session()``;
+the SDK will handle ``x_api_authorize``, ``x_api_account_select``, and
+``extension_required`` messages when the agent asks for them.
 
 Copy ``mate.yaml.example`` to ``mate.yaml`` if you want a custom ``base_url``;
 credentials in that file are not needed for this script.
@@ -86,7 +87,7 @@ def run_twitter_oauth_flow(client: Client) -> None:
 def print_menu() -> None:
     print("\n=== Standalone Auth Bootstrap ===")
     print("1) Email — send verify link for sign-in / sign-up")
-    print("2) X (Twitter) — get standalone OAuth login URL")
+    print("2) X (Twitter) — get standalone login OAuth URL")
     print("q) Quit")
 
 

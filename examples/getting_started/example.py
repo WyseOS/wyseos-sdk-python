@@ -1,36 +1,33 @@
 #!/usr/bin/env python3
 """
-Minimal marketing example for Python SDK.
+Minimal interactive marketing example for Python SDK.
+
+Marketing tasks default to execution_mode="auto" inside TaskRunner. The caller
+does not pass X account identifiers; the agent asks for authorization, account
+selection, or browser extension connection only when needed.
 """
 
 import logging
 import os
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from octoevo.mate import Client, create_task_runner
 from octoevo.mate.config import load_config
 from octoevo.mate.models import CreateSessionRequest
-from octoevo.mate.task_runner import (
-    ExecutionMode,
-    TaskExecutionOptions,
-    TaskMode,
-)
+from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode
 from octoevo.mate.websocket import WebSocketClient
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
-logger = logging.getLogger(__name__)
 
-# Keep JS-aligned default skills for reusable marketing demo.
 DEFAULT_MARKETING_SKILLS: List[Dict[str, str]] = [
     {
         "skill_id": "7ccfb3d7-e6ac-4cda-bce3-030768ef9a9f",
         "skill_name": "persona",
     }
 ]
-CLI_SAFE_EXTRA_INSTRUCTION = "Only generate content. Do not perform any browser actions such as posting, liking, or retweeting."
 
 
 def read_task() -> str:
@@ -47,7 +44,7 @@ def read_task() -> str:
     return "\n".join(lines).strip()
 
 
-def create_client() -> Client | None:
+def create_client() -> Optional[Client]:
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(script_dir, "mate.yaml")
     try:
@@ -59,25 +56,11 @@ def create_client() -> Client | None:
         return None
 
 
-def build_extra(product_id: str) -> Dict:
-    extra = {"skills": DEFAULT_MARKETING_SKILLS}
+def build_extra(product_id: str) -> Dict[str, Any]:
+    extra: Dict[str, Any] = {"skills": DEFAULT_MARKETING_SKILLS}
     if product_id:
         extra["marketing_product"] = {"product_id": product_id}
     return extra
-
-
-def resolve_execution_mode() -> Optional[ExecutionMode]:
-    raw = os.getenv("MATE_X_EXECUTION_MODE", "").strip()
-    if not raw:
-        return None
-    try:
-        return ExecutionMode(raw)
-    except ValueError:
-        print(
-            "Unsupported MATE_X_EXECUTION_MODE. "
-            "Expected one of: auto, api_only, extension_only."
-        )
-        return None
 
 
 def main():
@@ -89,13 +72,9 @@ def main():
     if not task:
         print("TASK is required")
         return
-    # task = f"{task}\n\nExtra Instruction: {CLI_SAFE_EXTRA_INSTRUCTION}"
 
     product_id = input("Enter PRODUCT_ID (optional): ").strip()
     extra = build_extra(product_id)
-    execution_mode = resolve_execution_mode()
-    if os.getenv("MATE_X_EXECUTION_MODE", "").strip() and execution_mode is None:
-        return
 
     req = CreateSessionRequest(
         task=task,
@@ -123,12 +102,14 @@ def main():
         completion_timeout=600,
     )
 
-    print("Starting interactive marketing session...")
+    print(
+        "Starting interactive marketing session "
+        "(auto execution; no X account identifiers required)..."
+    )
     task_runner.run_interactive_session(
         initial_task=task,
         task_mode=TaskMode.Marketing,
         extra=extra,
-        execution_mode=execution_mode,
         options=options,
     )
 

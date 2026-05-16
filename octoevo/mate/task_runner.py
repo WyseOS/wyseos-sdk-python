@@ -25,7 +25,11 @@ from .constants import (
 from .errors import SessionExecutionError
 from .extension_host import resolve_extension_webapp_host
 from .plan import Plan
-from .task_authorization import AuthorizationCoordinator, AuthorizationState
+from .task_authorization import (
+    AccountSelectionCoordinator,
+    AuthorizationCoordinator,
+    AuthorizationState,
+)
 from .websocket import EventLog, InputType, MessageType, PlanType, WebSocketClient
 
 logger = logging.getLogger(__name__)
@@ -140,6 +144,7 @@ class TaskRunner:
         self._interactive_mode = False
         self._ignore_history_messages = False
         self._authorization = AuthorizationCoordinator()
+        self._account_selection = AccountSelectionCoordinator()
 
     def _wait_until_connected(self, timeout_seconds: float = CONNECT_WAIT_TIMEOUT_SECONDS) -> bool:
         deadline = time.time() + timeout_seconds
@@ -179,6 +184,7 @@ class TaskRunner:
         self._pending_request_at = 0.0
         self._pending_empty_input_request_id = None
         self._authorization.reset()
+        self._account_selection.reset()
 
     def _build_noninteractive_x_api_authorize_error(
         self,
@@ -197,6 +203,9 @@ class TaskRunner:
                 "remote server, open the URL on another machine with a browser."
             )
         return self._authorization.build_noninteractive_error()
+
+    def _build_noninteractive_x_api_account_select_error(self) -> str:
+        return self._account_selection.build_noninteractive_error()
 
     @staticmethod
     def _normalize_execution_mode(
@@ -221,11 +230,19 @@ class TaskRunner:
         self,
         extra: Optional[Dict[str, Any]],
         execution_mode: Optional[Union[str, ExecutionMode]],
+        task_mode: TaskMode,
     ) -> Optional[Dict[str, Any]]:
         merged = dict(extra or {})
         resolved_mode = self._normalize_execution_mode(execution_mode)
-        if resolved_mode is None:
+        has_extra_execution_mode = "execution_mode" in merged
+        if resolved_mode is None and has_extra_execution_mode:
             resolved_mode = self._normalize_execution_mode(merged.get("execution_mode"))
+        if (
+            resolved_mode is None
+            and not has_extra_execution_mode
+            and task_mode == TaskMode.Marketing
+        ):
+            resolved_mode = ExecutionMode.Auto.value
         if resolved_mode is None:
             merged.pop("execution_mode", None)
         else:
@@ -296,7 +313,7 @@ class TaskRunner:
             )
 
         # Start the task
-        task_extra = self._resolve_extra(extra, execution_mode)
+        task_extra = self._resolve_extra(extra, execution_mode, task_mode)
         self._start_task(task, attachments or [], task_mode, task_extra)
 
         # Wait for completion
@@ -420,7 +437,7 @@ class TaskRunner:
             return
 
         # Start the task
-        task_extra = self._resolve_extra(extra, execution_mode)
+        task_extra = self._resolve_extra(extra, execution_mode, task_mode)
         self._start_task(initial_task, attachments or [], task_mode, task_extra)
         print(f"→ Started task: {initial_task}")
 
@@ -489,6 +506,24 @@ class TaskRunner:
                         print("→ Pause command sent")
                         time.sleep(3)
                         continue
+
+                    is_account_selection = (
+                        self._account_selection.state.request_id
+                        == self._pending_request_id
+                    )
+                    if is_account_selection:
+                        raw = user_input.strip()
+                        if not raw or not raw.isdigit():
+                            print("→ Enter the account number shown above")
+                            continue
+                        selected_index = int(raw) - 1
+                        accounts = self._account_selection.state.accounts
+                        if selected_index < 0 or selected_index >= len(accounts):
+                            print("→ Account number is out of range")
+                            continue
+                        user_input = self._account_selection.build_selection_response_text(
+                            accounts[selected_index]
+                        )
 
                     is_authorization_resume = (
                         self._authorization.state.status == "pending_authorization"
@@ -773,7 +808,7 @@ class TaskRunner:
                     {"error": str(e)},
                 )
 
-    def _extension_url_for_x_confirm(self) -> Optional[str]:
+    def _extension_url_for_extension_required(self) -> Optional[str]:
         """Build mate web extension connection URL."""
         query = urlencode(
             {
@@ -822,6 +857,96 @@ class TaskRunner:
                 timestamp,
             )
 
+    def _print_x_api_account_options(self) -> None:
+        state = self._account_selection.state
+        if state.reason:
+            print(state.reason)
+        print("Choose the X account for this session:")
+        for index, account in enumerate(state.accounts, start=1):
+            username = str(account.get("external_username") or "").strip()
+            external_user_id = str(account.get("external_user_id") or "").strip()
+            if username:
+                print(f"{index}. @{username.lstrip('@')} ({external_user_id})")
+            else:
+                print(f"{index}. {external_user_id}")
+
+    def _handle_x_api_account_select_message(
+        self,
+        options: TaskExecutionOptions,
+        timestamp: str,
+    ) -> None:
+        state = self._account_selection.state
+        self._pending_request_id = state.request_id
+        self._pending_input_type = InputType.TEXT
+        self._pending_request_at = time.time()
+        self._pending_empty_input_request_id = state.request_id
+        self._print_x_api_account_options()
+        if options.event_logging_enabled:
+            self._log_event("system", "x_api_account_select received", timestamp)
+
+    @staticmethod
+    def _extract_extension_required_payload(
+        message: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        msg_inner = message.get("message", {})
+        if isinstance(msg_inner, str):
+            return None
+        message_data = msg_inner.get("data", {})
+        if not isinstance(message_data, dict):
+            return None
+        data_type = str(message_data.get("type") or "")
+        if data_type != "extension_required":
+            return None
+        return message_data
+
+    def _handle_extension_required_message(
+        self,
+        payload: Dict[str, Any],
+        result_container: Dict,
+        completion_events: Dict,
+        options: TaskExecutionOptions,
+        timestamp: str,
+    ) -> None:
+        request_id = str(payload.get("request_id") or "").strip()
+        if not request_id:
+            self._set_execution_error(
+                result_container,
+                completion_events,
+                timestamp,
+                "extension_required is missing request_id; cannot resume the current task.",
+            )
+            return
+
+        reason = str(
+            payload.get("reason_message")
+            or "Browser extension is required to continue this task."
+        ).strip()
+        print(reason)
+        extension_url = self._extension_url_for_extension_required()
+        if extension_url:
+            _show_or_open_url(
+                extension_url,
+                options,
+                "Open this URL to connect the browser extension",
+            )
+        if not self._interactive_mode:
+            self._fail_noninteractive_input(
+                result_container,
+                completion_events,
+                timestamp,
+                f"extension_required: {reason}",
+            )
+            return
+
+        print("After connecting the browser extension, press Enter to continue.")
+        self._pending_request_id = request_id
+        self._pending_input_type = InputType.TEXT
+        self._pending_request_at = time.time()
+        # Allow bare Enter to acknowledge extension reconnect.
+        self._pending_empty_input_request_id = request_id
+        if options.event_logging_enabled:
+            self._log_event("system", "extension_required received", timestamp)
+
     def _handle_input_message(
         self,
         message: Dict,
@@ -830,12 +955,7 @@ class TaskRunner:
         options: TaskExecutionOptions,
         timestamp: str,
     ):
-        """Handle input requests with protocol priority:
-        1. message.type == "x_confirm" -> plan acceptance (accepted=true)
-        2. last message was plan -> plan acceptance
-        3. source == "marketing_analyst" -> store pending_request_id for user input
-        4. other -> store pending_request_id for user input
-        """
+        """Handle input requests with protocol-specific priority."""
         msg_inner = message.get("message", {})
         if isinstance(msg_inner, str):
             msg_inner = {}
@@ -868,6 +988,40 @@ class TaskRunner:
                 timestamp,
             )
             return
+
+        x_api_account_select_payload = self._account_selection.extract_payload(message)
+        if x_api_account_select_payload is not None:
+            error = self._account_selection.start(x_api_account_select_payload)
+            if error:
+                self._set_execution_error(
+                    result_container,
+                    completion_events,
+                    timestamp,
+                    error,
+                )
+                return
+            if not self._interactive_mode:
+                self._fail_noninteractive_input(
+                    result_container,
+                    completion_events,
+                    timestamp,
+                    self._build_noninteractive_x_api_account_select_error(),
+                )
+                return
+            self._handle_x_api_account_select_message(options, timestamp)
+            return
+
+        extension_required_payload = self._extract_extension_required_payload(message)
+        if extension_required_payload is not None:
+            self._handle_extension_required_message(
+                extension_required_payload,
+                result_container,
+                completion_events,
+                options,
+                timestamp,
+            )
+            return
+
         request_id = message_data.get("request_id")
 
         if not request_id:
@@ -903,13 +1057,6 @@ class TaskRunner:
                     logger.error(f"Failed to send stop on x_confirm {request_id}: {e}")
                 return
             try:
-                open_url = self._extension_url_for_x_confirm()
-                if open_url:
-                    _show_or_open_url(
-                        open_url,
-                        options,
-                        "Open this URL to connect the browser extension",
-                    )
                 resp = WebSocketClient.create_x_confirm_response(request_id)
                 self.ws_client.send_message(resp)
                 self._clear_pending_input_state()
@@ -950,6 +1097,17 @@ class TaskRunner:
                     self._log_event("system", f"Auto-accepted plan {request_id}", timestamp)
             except Exception as e:
                 logger.error(f"Failed to accept plan {request_id}: {e}")
+            return
+
+        is_plan_input = last_msg_type == MessageType.PLAN and last_plan_sub_type in [
+            PlanType.CREATE_PLAN,
+            PlanType.UPDATE_PLAN,
+        ]
+        if (
+            self._account_selection.state.request_id is not None
+            and not is_plan_input
+        ):
+            logger.debug("ignored ordinary input message while x_api_account_select is pending")
             return
 
         # Priority 3 & 4: store pending_request_id for user/marketing_analyst input

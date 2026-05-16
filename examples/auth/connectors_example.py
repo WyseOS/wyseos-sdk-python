@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Legacy low-level example: manage X (Twitter) connector accounts.
+Low-level admin example: manage connected X (Twitter) accounts.
 
 Demonstrates the three X-connector endpoints on UserService:
   - list_x_accounts()        -> GET /connectors/v1/x/accounts
@@ -9,10 +9,11 @@ Demonstrates the three X-connector endpoints on UserService:
 
 Requires a valid api_key (or jwt_token) in mate.yaml.
 
-This script is for standalone connector management only. It is not the
-recommended task-time authorization path. For in-task X authorization recovery,
-use ``TaskRunner.run_interactive_session()`` and let the SDK resume the same
-task round after ``x_api_authorize``.
+This script is for standalone connector management only. Normal marketing task
+callers should not pass connector_id, external_user_id, or external_username.
+Use ``TaskRunner.run_interactive_session()`` and let the agent request
+``x_api_authorize``, ``x_api_account_select``, or ``extension_required`` only
+when needed.
 """
 
 import os
@@ -36,7 +37,7 @@ def create_client() -> Optional[Client]:
 
 
 def print_menu() -> None:
-    print("\n=== Legacy X Connector Menu ===")
+    print("\n=== X Connector Admin Menu ===")
     print("1) List connected X accounts")
     print("2) Authorize a connector account (standalone binding URL)")
     print("3) Delete a connected X account")
@@ -59,6 +60,7 @@ def do_list(client: Client) -> None:
         username = f"@{account.external_username}" if account.external_username else "-"
         print(
             f"  {idx}. connector_id={account.connector_id} "
+            f"external_user_id={account.external_user_id} "
             f"username={username} "
             f"status={account.status} "
             f"expires_at={account.expires_at}"
@@ -79,6 +81,7 @@ def do_authorize(client: Client) -> None:
 
     print("Open this URL in a browser to complete the standalone connector binding:")
     print(resp.auth_url)
+    print("Task-time authorization should use run_interactive_session() instead.")
 
 
 def do_delete(client: Client) -> None:

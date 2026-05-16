@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Iterable, Literal, Optional
 
 Environment = Literal["local", "remote"]
-Capability = Literal["extension", "api"]
+Capability = Literal["extension", "api", "auto"]
 TaskType = Literal["reply", "publish", "interact"]
 Expected = Literal["success", "failure"]
 
@@ -28,17 +28,27 @@ SCENARIOS = [
     Scenario("local-api-reply", "local", "api", "reply", "failure", "REPLY_API_UNSUPPORTED"),
     Scenario("local-api-publish", "local", "api", "publish", "success"),
     Scenario("local-api-interact", "local", "api", "interact", "success"),
+    Scenario("local-auto-reply", "local", "auto", "reply", "success"),
+    Scenario("local-auto-publish", "local", "auto", "publish", "success"),
+    Scenario("local-auto-interact", "local", "auto", "interact", "success"),
     Scenario("remote-extension-reply", "remote", "extension", "reply", "failure", "EXTENSION_REQUIRED"),
     Scenario("remote-extension-publish", "remote", "extension", "publish", "failure", "EXTENSION_REQUIRED"),
     Scenario("remote-extension-interact", "remote", "extension", "interact", "failure", "EXTENSION_REQUIRED"),
     Scenario("remote-api-reply", "remote", "api", "reply", "failure", "REPLY_API_UNSUPPORTED"),
     Scenario("remote-api-publish", "remote", "api", "publish", "success"),
     Scenario("remote-api-interact", "remote", "api", "interact", "success"),
+    Scenario("remote-auto-reply", "remote", "auto", "reply", "failure", "EXTENSION_REQUIRED"),
+    Scenario("remote-auto-publish", "remote", "auto", "publish", "success"),
+    Scenario("remote-auto-interact", "remote", "auto", "interact", "success"),
 ]
 
 
 def execution_mode_for(capability: Capability) -> str:
-    return "api_only" if capability == "api" else "extension_only"
+    if capability == "api":
+        return "api_only"
+    if capability == "extension":
+        return "extension_only"
+    return "auto"
 
 
 def browser_available_for(environment: Environment) -> bool:

@@ -1,7 +1,13 @@
 mate:
-  # API Configuration
-  api_key: ""
+  # Required: choose one authentication method.
+  api_key: "your-api-key"
+  # jwt_token: "your-jwt-token"
+
+  # API base URL.
   base_url: "https://api.dev.weclaw.ai"
 
-  # Client Configuration
+  # Client timeout in seconds.
   timeout: 30
+
+  # Marketing examples use execution_mode="auto" by default in TaskRunner.
+  # Do not configure X external_user_id or external_username here.

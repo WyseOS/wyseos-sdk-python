@@ -2,15 +2,14 @@
 
 这个目录用于运行真实的 X capability 端到端营销会话，验证 SDK 在不同环境和 capability 组合下的实际行为。
 
-它覆盖的是 **SDK 侧固定 12 个场景矩阵**，不是通用测试框架：
+它覆盖的是 **SDK 侧固定 18 个场景矩阵**，不是通用测试框架：
 
 - environment: `local` / `remote`
-- capability: `extension` / `api`
+- capability: `extension` / `api` / `auto`
 - task type: `reply` / `publish` / `interact`
 
 当前 **不覆盖** 以下内容：
 
-- `auto` 模式
 - messaging 流程
 - 任务内交互式 OAuth 恢复
 
@@ -18,7 +17,7 @@
 
 ## 场景范围
 
-自动 runner 覆盖的 12 个场景如下：
+自动 runner 覆盖的 18 个场景如下：
 
 | 场景 ID | environment | capability | task type | execution_mode | 预期结果 |
 |---|---|---|---|---|---|
@@ -28,12 +27,18 @@
 | `local-api-reply` | `local` | `api` | `reply` | `api_only` | `FAIL`，原因为 `REPLY_API_UNSUPPORTED` |
 | `local-api-publish` | `local` | `api` | `publish` | `api_only` | `PASS` |
 | `local-api-interact` | `local` | `api` | `interact` | `api_only` | `PASS` |
+| `local-auto-reply` | `local` | `auto` | `reply` | `auto` | `PASS` |
+| `local-auto-publish` | `local` | `auto` | `publish` | `auto` | `PASS` |
+| `local-auto-interact` | `local` | `auto` | `interact` | `auto` | `PASS` |
 | `remote-extension-reply` | `remote` | `extension` | `reply` | `extension_only` | `FAIL`，原因为 `EXTENSION_REQUIRED` |
 | `remote-extension-publish` | `remote` | `extension` | `publish` | `extension_only` | `FAIL`，原因为 `EXTENSION_REQUIRED` |
 | `remote-extension-interact` | `remote` | `extension` | `interact` | `extension_only` | `FAIL`，原因为 `EXTENSION_REQUIRED` |
 | `remote-api-reply` | `remote` | `api` | `reply` | `api_only` | `FAIL`，原因为 `REPLY_API_UNSUPPORTED` |
 | `remote-api-publish` | `remote` | `api` | `publish` | `api_only` | `PASS` |
 | `remote-api-interact` | `remote` | `api` | `interact` | `api_only` | `PASS` |
+| `remote-auto-reply` | `remote` | `auto` | `reply` | `auto` | `FAIL`，原因为 `EXTENSION_REQUIRED` |
+| `remote-auto-publish` | `remote` | `auto` | `publish` | `auto` | `PASS` |
+| `remote-auto-interact` | `remote` | `auto` | `interact` | `auto` | `PASS` |
 
 说明：
 
@@ -41,6 +46,7 @@
 - `remote` 表示无本机浏览器，runner 会把 `browser_available=False` 传给 `TaskRunner`
 - `extension` capability 对应 `execution_mode=extension_only`
 - `api` capability 对应 `execution_mode=api_only`
+- `auto` capability 对应 `execution_mode=auto`
 
 ## 运行前准备
 
@@ -74,7 +80,7 @@ export MATE_E2E_USER_INPUT_TIMEOUT_SECONDS="120"
 | `MATE_E2E_PRODUCT_NAME` | 可选 | 用于生成更稳定的 seed prompt。未设置时可为空。 |
 | `MATE_E2E_TARGET_TWEET_URL` | `reply` / `interact` 必需 | reply 和 interact 场景的目标推文链接。 |
 | `MATE_E2E_PUBLISH_TEXT_PREFIX` | 可选 | publish 场景推文前缀，默认值是 `Wyse E2E test`。 |
-| `MATE_E2E_X_ACCOUNT` | `api` 场景强烈建议提供 | 传给 SDK 作为 `external_username` 或 `external_user_id`。缺失时，API publish / interact 场景可能返回 `ACCOUNT_IDENTIFIER_REQUIRED`。 |
+| `MATE_E2E_X_ACCOUNT` | `api` / `auto` 场景强烈建议提供 | 传给 SDK 作为 `external_username` 或 `external_user_id`。缺失时，API publish / interact 场景可能返回 `ACCOUNT_IDENTIFIER_REQUIRED`。 |
 | `MATE_E2E_TIMEOUT_SECONDS` | 可选 | 单次任务超时，默认 `900` 秒。 |
 | `MATE_E2E_USER_INPUT_TIMEOUT_SECONDS` | 可选 | 用户输入等待超时，默认 `120` 秒。 |
 
@@ -105,7 +111,7 @@ API 场景要求目标 X 账号已经完成预授权。
 
 补充说明：
 
-- `execute` 阶段会显式通过 `run_task(..., execution_mode=...)` 传入 `api_only` 或 `extension_only`
+- `execute` 阶段会显式通过 `run_task(..., execution_mode=...)` 传入 `api_only`、`extension_only` 或 `auto`
 - `seed` 阶段不强制 capability 模式，只负责准备会话数据
 - `reply` 场景在 `local` 环境下，如果首次 seed 没有产出记录，runner 会尝试一次浏览器 fallback seed
 
@@ -116,6 +122,7 @@ API 场景要求目标 X 账号已经完成预授权。
 ```bash
 python main.py --all
 python main.py --capability extension
+python main.py --capability auto
 python main.py --environment remote
 python main.py --task-type reply
 python main.py --scenario local-api-publish
@@ -124,7 +131,7 @@ python main.py --scenario local-api-publish
 CLI 规则：
 
 - 必须指定 `--all` 或至少一个过滤参数，否则程序直接退出
-- `--all` 表示显式确认运行全部 12 个场景
+- `--all` 表示显式确认运行全部 18 个场景
 - `--all` 不能与任何过滤参数混用
 - 多个过滤参数同时出现时，取交集
 
@@ -132,10 +139,10 @@ CLI 规则：
 
 | 参数 | 可选值 | 说明 |
 |---|---|---|
-| `--all` | — | 运行全部 12 个场景。它是“显式全量执行开关”，不是过滤条件。 |
+| `--all` | — | 运行全部 18 个场景。它是“显式全量执行开关”，不是过滤条件。 |
 | `--scenario <id>` | 见上表 | 只运行一个精确场景 ID。 |
 | `--environment <env>` | `local` / `remote` | 按运行环境过滤。 |
-| `--capability <cap>` | `extension` / `api` | 按 capability 过滤。 |
+| `--capability <cap>` | `extension` / `api` / `auto` | 按 capability 过滤。 |
 | `--task-type <type>` | `reply` / `publish` / `interact` | 按任务类型过滤。 |
 
 ## 结果判定
@@ -182,13 +189,12 @@ CLI 最终状态只会落在这四类：
 
 这个目录适合做的事情：
 
-- 回归验证 12 个固定 SDK capability 场景
+- 回归验证 18 个固定 SDK capability 场景
 - 检查 capability 选择与环境约束是否符合预期
 - 观察真实 session 执行日志和最终结构化结果
 
 这个目录不适合做的事情：
 
-- 验证 `auto` 模式
 - 验证 messaging 类流程
 - 验证任务内 same-round 交互式 OAuth 恢复
 - 替代 agent 仓库中的更底层 capability / browser 手工烟测

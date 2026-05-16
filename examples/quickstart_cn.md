@@ -1,19 +1,23 @@
 [English](quickstart.md) | [中文](quickstart_cn.md)
 
-# 快速开始指南
+# OctoEvo Python SDK 快速开始
 
-这个 SDK 有 **两个独立场景**：
+本指南覆盖 SDK 的两个主要工作流：
 
-* **营销场景（WebSocket + Session APIs）**
+- **营销会话**：基于 WebSocket 的交互式任务执行，用于 tweet、reply、like、retweet 等流程。
+- **产品分析**：基于 HTTP API 的产品分析任务创建、状态轮询和报告读取。
 
-  用于交互式生成循环（tweet/reply/like/retweet 流程）。
-* **产品分析（HTTP 轮询 + Product APIs）**
+两个工作流相互独立。营销任务使用 `TaskRunner`；产品分析使用 `client.product`。
 
-  用于创建产品、轮询状态和获取最终报告。
+## 环境要求
 
-二者是独立入口，不混用。
+- Python 3.9+
+- OctoEvo `api_key` 或 `jwt_token`
+- `pip install octoevo`
 
-## 1. 环境准备
+不要提交真实密钥。请把本地密钥放在 `mate.yaml`、环境专用 Secret 存储或 CI Secret Manager 中。
+
+## 安装
 
 ```bash
 python -m venv .venv
@@ -21,19 +25,19 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install octoevo
 ```
 
-## 2. 配置客户端
+## 配置
 
 创建 `mate.yaml`：
 
 ```yaml
 mate:
   api_key: "your-api-key"
-  # or jwt_token: "your-jwt-token"
+  # jwt_token: "your-jwt-token"
   base_url: "https://api.dev.weclaw.ai"
   timeout: 30
 ```
 
-初始化：
+初始化客户端：
 
 ```python
 from octoevo.mate import Client
@@ -42,72 +46,21 @@ from octoevo.mate.config import load_config
 client = Client(load_config("mate.yaml"))
 ```
 
-## 3. 注册账户（两种方式）
+## 工作流 A：营销会话
 
-登录与注册都可在**不提供** `api_key`、`jwt_token` 的情况下发起（这些接口在 SDK 中走 `skip_auth`）。无密钥时可用 `Client(ClientOptions())` 使用默认 `base_url`，或仅用 `load_config("mate.yaml")` 配置自定义 `base_url`。
-
-这些都是独立的引导式登录流程，不等于 `TaskRunner` 内的任务期 X 授权恢复。
-
-1. **邮箱 magic link** — 向邮箱发送登录/注册链接，用户在浏览器中打开完成验证：
+营销任务会在 `TaskRunner` 内默认使用 `execution_mode="auto"`。调用方不要传 `external_user_id` 或 `external_username`；agent 会自行选择执行通道，并且只在必要时请求 X 授权、X 账号选择或浏览器插件连接。
 
 ```python
-from octoevo.mate import Client, ClientOptions
-
-client = Client(ClientOptions())  # 或使用不含密钥的 mate.yaml
-
-resp = client.user.start_email_verification(
-    email="you@example.com",
-    invite_code=None,  # 可选填邀请码
-)
-# resp.sign_type、resp.pre_auth_id — 用户点击邮件内链接后按产品流程续接
-```
-
-2. **X（Twitter）OAuth** — 获取独立登录/注册用的授权 URL，在浏览器中打开完成：
-
-```python
-url_resp = client.user.get_x_oauth_url()
-print(url_resp.auth_url)  # 在浏览器中打开
-```
-
-可运行参考：`examples/auth/auth_example.py`。
-
-如果营销任务在执行过程中需要 X 授权，不要手动调用 `get_x_oauth_url()`。应使用 `run_interactive_session(...)`，SDK 会打印 `x_api_authorize` URL，并在你回到终端按回车后继续同一轮任务。
-
-## 4. 独立的 X（Twitter）账户相关 API
-
-区分两类场景：**账户登录/注册**（无 API 密钥）与**将 X 账号绑定到已有账户**（登录后使用 `api_key` 或 `jwt_token`）。
-
-这些 `UserService` 接口属于低层的独立辅助能力，不是推荐的任务期授权路径。
-
-| 用途 | 调用 | 是否需要已登录 |
-| ---- | ---- | -------------- |
-| 使用 X 登录或注册 | `client.user.get_x_oauth_url()` | 否 |
-| 列出已绑定的 X 账号 | `client.user.list_x_accounts()` | 是 |
-| 发起绑定或换绑 X（连接器） | `client.user.authorize_x_account(target_connector_id=None)` | 是；可选 `target_connector_id` 指定要写入的凭据位 |
-| 解绑已连接的 X 账号 | `client.user.delete_x_account(connector_id)` | 是 |
-
-`authorize_x_account` 返回 `OAuthURLResponse`，通过 `auth_url` 在浏览器中完成独立的连接器绑定流程。
-
-可运行参考：`examples/auth/connectors_example.py`。
-
-## 5. 选择一个工作流
-
-| 工作流   | 入口                                                     | 传输方式  | 主要输出                |
-| -------- | -------------------------------------------------------- | --------- | ----------------------- |
-| 营销会话 | `create_task_runner(...).run_interactive_session(...)` | WebSocket | 流式会话消息 + 营销数据 |
-| 产品分析 | `client.product.create_and_wait(...)`                  | HTTP 轮询 | `ProductReport`       |
-
----
-
-## A) 营销会话（独立流程）
-
-### A1. 创建会话
-
-```python
+from octoevo.mate import Client, create_task_runner
+from octoevo.mate.config import load_config
 from octoevo.mate.models import CreateSessionRequest
+from octoevo.mate.task_runner import TaskExecutionOptions, TaskMode
+from octoevo.mate.websocket import WebSocketClient
+
+client = Client(load_config("mate.yaml"))
 
 req = CreateSessionRequest(
-    task="Create a marketing tweet thread for my product",
+    task="Draft a launch thread for my product",
     mode="marketing",
     platform="api",
     extra={
@@ -118,25 +71,6 @@ req = CreateSessionRequest(
 
 session = client.session.create(req)
 session_info = client.session.get_info(session.session_id)
-print("session_id:", session.session_id)
-```
-
-如果需要 X API-only 执行，应在启动 `TaskRunner` 时显式传入 `execution_mode`：
-
-```python
-from octoevo.mate.task_runner import ExecutionMode
-
-execution_mode = ExecutionMode.ApiOnly
-```
-
-当需要 X OAuth 授权时，`run_interactive_session(...)` 会打印授权 URL，等待你在浏览器中完成授权，然后在回到终端按回车后继续同一轮任务。
-
-### A2. 运行交互式会话
-
-```python
-from octoevo.mate import create_task_runner
-from octoevo.mate.task_runner import ExecutionMode, TaskExecutionOptions, TaskMode
-from octoevo.mate.websocket import WebSocketClient
 
 ws_client = WebSocketClient(
     base_url=client.base_url,
@@ -145,17 +79,13 @@ ws_client = WebSocketClient(
     session_id=session_info.session_id,
 )
 
-task_runner = create_task_runner(ws_client, client, session_info)
-
-task_runner.run_interactive_session(
+runner = create_task_runner(ws_client, client, session_info)
+runner.run_interactive_session(
     initial_task="Generate 3 tweet drafts and recommended replies",
-    attachments=[],
     task_mode=TaskMode.Marketing,
     extra=req.extra,
-    execution_mode=ExecutionMode.ApiOnly,
     options=TaskExecutionOptions(
         auto_accept_plan=False,
-        capture_screenshots=False,
         verbose=True,
         stop_on_x_confirm=True,
         completion_timeout=600,
@@ -163,134 +93,123 @@ task_runner.run_interactive_session(
 )
 ```
 
-### A3. 读取营销数据
+`stop_on_x_confirm=True` 是更安全的 CLI 默认值：当任务请求确认真实社交动作时，SDK 会停止会话而不是自动确认。只有当你的应用明确需要自动确认执行时，才设置为 `False`。
+
+在 `run_interactive_session()` 中，SDK 会处理这些结构化提示：
+
+| 提示 | 含义 | SDK 行为 |
+| --- | --- | --- |
+| `x_api_authorize` | 需要 X API 授权 | 打印授权 URL，用户完成授权后按回车继续 |
+| `x_api_account_select` | 当前用户连接了多个 X 账号 | 展示账号列表，并把本次会话选择回传给 agent |
+| `extension_required` | 当前动作必须使用浏览器插件 | 打印插件连接 URL，并等待用户确认 |
+
+会话结束后读取营销数据：
 
 ```python
-reply_data = client.session.get_marketing_data(session.session_id, type="reply")
-like_data = client.session.get_marketing_data(session.session_id, type="like")
-retweet_data = client.session.get_marketing_data(session.session_id, type="retweet")
 tweet_data = client.session.get_marketing_data(session.session_id, type="tweet")
+reply_data = client.session.get_marketing_data(session.session_id, type="reply")
 
-print(len(reply_data.get("reply", [])), "replies")
 print(len(tweet_data.get("tweet", [])), "draft tweets")
+print(len(reply_data.get("reply", [])), "replies")
 ```
 
-交互命令：
+可运行示例：[`getting_started/example.py`](getting_started/example.py)
 
-- `stop` -> 发送停止消息
-- `pause` -> 发送暂停消息
-- `exit` / `quit` / `q` -> 退出会话
+## 工作流 B：产品分析
 
-### A4. 停止会话（HTTP 或 WebSocket）
-
-结束进行中的会话有两种方式：
-
-1. **HTTP 接口** — 不依赖 WebSocket，使用创建会话时得到的 `session_id`：
+产品分析是纯 HTTP 流程，不使用 WebSocket 或 `TaskRunner`。
 
 ```python
-client.session.stop(session.session_id)
+from octoevo.mate import Client
+from octoevo.mate.config import load_config
+
+client = Client(load_config("mate.yaml"))
+
+report = client.product.create_and_wait(
+    product="Notion",  # 产品名或 URL
+    attachments=None,
+    on_poll=lambda attempt, status: print(f"[poll {attempt}] {status}"),
+)
+
+print("report_id:", report.report_id)
+print("product_name:", report.product_name)
+print("keywords:", report.keywords)
+print("competitors:", report.competitors)
 ```
 
-2. **WebSocket** — 在已连接的前提下：
-
-```python
-ws_client.send_stop()
-```
-
-交互式命令行里输入 `stop` 与调用 `send_stop()` 等价：都会通过 WebSocket 发送 `type: "stop"` 的消息。HTTP 的 `stop` 则通过 REST 通知服务端结束该会话。
-
-可运行参考：
-- 基础营销流程：`examples/getting_started/example.py`
-- 全链路 E2E 矩阵回归验证：[`examples/x_capability_e2e/README.md`](x_capability_e2e/README.md)
-
----
-
-## B) 产品分析（独立流程）
-
-### B1. 可选：上传附件
-
-将上传响应作为 `attachments` 的可信来源：
+如需附件，先上传文件，再使用上传响应中的字段：
 
 ```python
 upload = client.file_upload.upload_file("brief.pdf")
 attachments = [{"file_name": upload["file_name"], "file_url": upload["file_url"]}]
-```
 
-### B2. 一步式 API（推荐）
-
-```python
 report = client.product.create_and_wait(
-    product="Notion",      # product name or URL
-    attachments=attachments,  # can be None
-    poll_interval=20,      # default
-    max_attempts=30,       # default: 10 minutes
+    product="Notion",
+    attachments=attachments,
 )
-
-print("report_id:", report.report_id)
-print("status:", report.status)
-print("product_name:", report.product_name)
 ```
 
-### B3. 分步 API
+可运行示例：[`product_analysis/example.py`](product_analysis/example.py)
+
+## 可选：账户引导
+
+这些接口是独立账户流程，不是普通营销任务执行的必需步骤。
 
 ```python
-from octoevo.mate.models import CreateProductRequest
+from octoevo.mate import Client, ClientOptions
 
-created = client.product.create(
-    CreateProductRequest(product="Notion", attachments=attachments)
+client = Client(ClientOptions())
+
+email_resp = client.user.start_email_verification(
+    email="you@example.com",
+    invite_code=None,
 )
-info = client.product.get_info(created.product_id)
+print(email_resp.sign_type, email_resp.pre_auth_id)
 
-if info.analysis_result and info.analysis_result.report_id:
-    report = client.product.get_report(info.analysis_result.report_id)
+x_login = client.user.get_x_oauth_url()
+print(x_login.auth_url)
 ```
 
-可运行示例：`examples/product_analysis/example.py`。
-
----
-
-## 6. 错误处理
+低层 X 连接器管理需要已认证的客户端：
 
 ```python
-from octoevo.mate.errors import APIError, NetworkError, ConfigError, WebSocketError
+accounts = client.user.list_x_accounts()
+auth = client.user.authorize_x_account(target_connector_id=None)
+print(len(accounts.items), auth.auth_url)
+
+client.user.delete_x_account("connector-id")
+```
+
+这些连接器 API 只用于账号管理。不要用它们为任务选择执行账号；`run_interactive_session()` 会处理任务期授权和账号选择。
+
+可运行示例：
+
+- [`auth/auth_example.py`](auth/auth_example.py)
+- [`auth/connectors_example.py`](auth/connectors_example.py)
+
+## 错误处理
+
+```python
+from octoevo.mate.errors import APIError, ConfigError, NetworkError, WebSocketError
 
 try:
-    # your SDK calls
+    # SDK calls
     pass
-except APIError as e:
-    print("APIError:", e)
-except WebSocketError as e:
-    print("WebSocketError:", e)
-except NetworkError as e:
-    print("NetworkError:", e)
-except ConfigError as e:
-    print("ConfigError:", e)
+except APIError as exc:
+    print("API error:", exc)
+except WebSocketError as exc:
+    print("WebSocket error:", exc)
+except NetworkError as exc:
+    print("Network error:", exc)
+except ConfigError as exc:
+    print("Config error:", exc)
 ```
 
-## 7. 相关 API
+对于可能需要用户输入的营销任务，优先使用 `run_interactive_session()`。非交互式 `run_task()` 在遇到授权、账号选择或浏览器插件连接需求时会安全失败。
 
-独立账户引导（不需要 `api_key` / `jwt_token`）：
+## 更多参考
 
-- `client.user.start_email_verification(email, invite_code=None)`
-- `client.user.get_x_oauth_url()`
-
-独立 X 连接器管理（登录后、带 `api_key` 或 `jwt_token`）：
-
-- `client.user.list_x_accounts()`
-- `client.user.authorize_x_account(target_connector_id=None)`
-- `client.user.delete_x_account(connector_id)`
-
-营销：
-
-- `client.session.stop(session_id)`
-- `client.session.get_marketing_data(...)`
-- `client.marketing.update_report(report_id, data)`
-- `client.marketing.get_research_tweets(query_id)`
-
-产品分析：
-
-- `client.product.create(request)`
-- `client.product.create_and_wait(product, attachments=None, ...)`
-- `client.product.get_info(product_id)`
-- `client.product.get_report(report_id)`
-- `client.product.get_categories()`
+- 主 README：[`../README_cn.md`](../README_cn.md)
+- 安装说明：[`../installation_cn.md`](../installation_cn.md)
+- 营销示例：[`getting_started/example.py`](getting_started/example.py)
+- 产品分析示例：[`product_analysis/example.py`](product_analysis/example.py)

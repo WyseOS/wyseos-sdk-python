@@ -5,5 +5,6 @@ mate:
 
   # Required for connectors_example.py (list / authorize / delete X accounts).
   # Not required for auth_example.py — those flows are public.
-  # Uncomment and fill in to use connector endpoints:
+  # Uncomment one authentication method to use connector endpoints:
   # api_key: "your-api-key"
+  # jwt_token: "your-jwt-token"

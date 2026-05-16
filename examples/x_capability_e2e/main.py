@@ -29,7 +29,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--all", action="store_true", help="Run all scenarios.")
     parser.add_argument("--scenario", help="Run one scenario by id.")
     parser.add_argument("--environment", choices=("local", "remote"))
-    parser.add_argument("--capability", choices=("extension", "api"))
+    parser.add_argument("--capability", choices=("extension", "api", "auto"))
     parser.add_argument("--task-type", choices=("reply", "publish", "interact"))
     return parser.parse_args()
 
