@@ -67,9 +67,6 @@ export MATE_E2E_PRODUCT_ID="product-id"
 export MATE_E2E_PRODUCT_NAME="Optional Product Name"
 export MATE_E2E_TARGET_TWEET_URL="https://x.com/user/status/123"
 export MATE_E2E_PUBLISH_TEXT_PREFIX="Wyse E2E test"
-export MATE_E2E_X_ACCOUNT="your_x_username_or_id"
-export MATE_E2E_TIMEOUT_SECONDS="900"
-export MATE_E2E_USER_INPUT_TIMEOUT_SECONDS="120"
 ```
 
 各变量含义如下：
@@ -80,9 +77,8 @@ export MATE_E2E_USER_INPUT_TIMEOUT_SECONDS="120"
 | `MATE_E2E_PRODUCT_NAME` | 可选 | 用于生成更稳定的 seed prompt。未设置时可为空。 |
 | `MATE_E2E_TARGET_TWEET_URL` | `reply` / `interact` 必需 | reply 和 interact 场景的目标推文链接。 |
 | `MATE_E2E_PUBLISH_TEXT_PREFIX` | 可选 | publish 场景推文前缀，默认值是 `Wyse E2E test`。 |
-| `MATE_E2E_X_ACCOUNT` | `api` / `auto` 场景强烈建议提供 | 传给 SDK 作为 `external_username` 或 `external_user_id`。缺失时，API publish / interact 场景可能返回 `ACCOUNT_IDENTIFIER_REQUIRED`。 |
-| `MATE_E2E_TIMEOUT_SECONDS` | 可选 | 单次任务超时，默认 `900` 秒。 |
-| `MATE_E2E_USER_INPUT_TIMEOUT_SECONDS` | 可选 | 用户输入等待超时，默认 `120` 秒。 |
+
+任务超时默认使用代码内的 `900` 秒；用户输入等待超时默认使用代码内的 `120` 秒。
 
 ## 授权前提
 

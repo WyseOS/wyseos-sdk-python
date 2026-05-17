@@ -23,23 +23,9 @@ class E2EConfig:
     product_name: Optional[str]
     target_tweet_url: Optional[str]
     publish_text_prefix: str
-    x_account: Optional[str]
     timeout_seconds: int
     user_input_timeout_seconds: int
     result_dir: Path
-
-
-def _env_int(name: str, default: int) -> int:
-    raw = os.getenv(name, "").strip()
-    if not raw:
-        return default
-    try:
-        value = int(raw)
-    except ValueError as exc:
-        raise ValueError(f"{name} must be an integer") from exc
-    if value <= 0:
-        raise ValueError(f"{name} must be greater than 0")
-    return value
 
 
 def load_e2e_config(base_dir: Path) -> E2EConfig:
@@ -61,11 +47,7 @@ def load_e2e_config(base_dir: Path) -> E2EConfig:
         target_tweet_url=os.getenv("MATE_E2E_TARGET_TWEET_URL", "").strip() or None,
         publish_text_prefix=os.getenv("MATE_E2E_PUBLISH_TEXT_PREFIX", "Wyse E2E test").strip()
         or "Wyse E2E test",
-        x_account=os.getenv("MATE_E2E_X_ACCOUNT", "").strip() or None,
-        timeout_seconds=_env_int("MATE_E2E_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS),
-        user_input_timeout_seconds=_env_int(
-            "MATE_E2E_USER_INPUT_TIMEOUT_SECONDS",
-            DEFAULT_USER_INPUT_TIMEOUT_SECONDS,
-        ),
+        timeout_seconds=DEFAULT_TIMEOUT_SECONDS,
+        user_input_timeout_seconds=DEFAULT_USER_INPUT_TIMEOUT_SECONDS,
         result_dir=base_dir / "results",
     )

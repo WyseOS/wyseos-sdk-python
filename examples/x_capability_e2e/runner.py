@@ -259,12 +259,6 @@ def _build_extra(config: E2EConfig) -> Dict[str, Any]:
     }
     if config.product_id:
         extra["marketing_product"] = {"product_id": config.product_id}
-    account = (config.x_account or "").strip().lstrip("@")
-    if account:
-        if account.isdigit():
-            extra["external_user_id"] = account
-        else:
-            extra["external_username"] = account
     return extra
 
 
