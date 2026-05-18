@@ -63,22 +63,19 @@ cp mate.yaml.example mate.yaml
 运行前请按需设置以下环境变量：
 
 ```bash
-export MATE_E2E_PRODUCT_ID="product-id"
-export MATE_E2E_PRODUCT_NAME="Optional Product Name"
-export MATE_E2E_TARGET_TWEET_URL="https://x.com/user/status/123"
-export MATE_E2E_PUBLISH_TEXT_PREFIX="Wyse E2E test"
+export MATE_E2E_REPLY_TWEET_URL="https://x.com/user/status/123"
 ```
 
 各变量含义如下：
 
 | 变量名 | 是否必需 | 说明 |
 |---|---|---|
-| `MATE_E2E_PRODUCT_ID` | 可选 | 用于注入 `marketing_product.product_id`。若设置且未显式提供 `MATE_E2E_PRODUCT_NAME`，runner 会尝试通过产品接口补全产品名。 |
-| `MATE_E2E_PRODUCT_NAME` | 可选 | 用于生成更稳定的 seed prompt。未设置时可为空。 |
-| `MATE_E2E_TARGET_TWEET_URL` | `reply` / `interact` 必需 | reply 和 interact 场景的目标推文链接。 |
-| `MATE_E2E_PUBLISH_TEXT_PREFIX` | 可选 | publish 场景推文前缀，默认值是 `Wyse E2E test`。 |
+| `MATE_E2E_REPLY_TWEET_URL` | `reply` 必需 | reply 场景的目标推文链接；也可用 `--reply-tweet-url` 传入。publish 和 interact 场景不使用。 |
 
 任务超时默认使用代码内的 `900` 秒；用户输入等待超时默认使用代码内的 `120` 秒。
+publish 场景的推文标记前缀默认使用代码内常量 `fictions:`。
+
+E2E 会使用内置默认产品，通过结构化 `extra.marketing_product.product_id` 注入产品上下文。提示词中只包含产品名称，不要求调用方通过环境变量传产品信息。
 
 ## 授权前提
 
@@ -140,6 +137,7 @@ CLI 规则：
 | `--environment <env>` | `local` / `remote` | 按运行环境过滤。 |
 | `--capability <cap>` | `extension` / `api` / `auto` | 按 capability 过滤。 |
 | `--task-type <type>` | `reply` / `publish` / `interact` | 按任务类型过滤。 |
+| `--reply-tweet-url <url>` | X/Twitter 推文 URL | reply 场景目标推文链接；优先级高于 `MATE_E2E_REPLY_TWEET_URL`。 |
 
 ## 结果判定
 

@@ -90,14 +90,12 @@ def build_task_prompt(
     run_id: str,
     nonce: str,
     publish_text_prefix: str,
-    target_tweet_url: Optional[str],
 ) -> str:
     return build_execute_task_prompt(
         scenario=scenario,
         run_id=run_id,
         nonce=nonce,
         publish_text_prefix=publish_text_prefix,
-        target_tweet_url=target_tweet_url,
     )
 
 
@@ -106,12 +104,10 @@ def build_seed_task_prompt(
     run_id: str,
     nonce: str,
     publish_text_prefix: str,
-    target_tweet_url: Optional[str],
-    product_name: Optional[str],
+    reply_tweet_url: Optional[str],
 ) -> str:
     marker = f"{run_id} {nonce}"
     header = f"Run ID: {run_id}\nNonce: {nonce}\n\n"
-    product_clause = f" about {product_name}" if product_name else ""
     guard = (
         "\nDo not analyze the product."
         "\nDo not create a strategy, campaign, or multi-step plan."
@@ -119,11 +115,11 @@ def build_seed_task_prompt(
         "\nFinish immediately after the draft or record is saved."
     )
     if scenario.task_type == "reply":
-        if not target_tweet_url:
-            raise ValueError("MATE_E2E_TARGET_TWEET_URL is required for reply scenarios")
+        if not reply_tweet_url:
+            raise ValueError("MATE_E2E_REPLY_TWEET_URL is required for reply scenarios")
         return (
             f"{header}\n"
-            f"Write exactly one reply draft{product_clause} for this tweet: {target_tweet_url}\n"
+            f"Write exactly one reply draft for this tweet: {reply_tweet_url}\n"
             "Save it as the current session reply draft.\n"
             "Do not publish the reply.\n"
             f"The reply draft must include this exact run id and nonce: {marker}."
@@ -132,21 +128,21 @@ def build_seed_task_prompt(
     if scenario.task_type == "publish":
         return (
             f"{header}\n"
-            f"Write exactly one short tweet draft{product_clause}.\n"
+            "Write exactly one short tweet draft.\n"
             "Save it as the current session tweet draft.\n"
             "Do not publish the tweet.\n"
             f"The draft text must include: {publish_text_prefix} {marker}."
             f"{guard}"
         )
-    if not target_tweet_url:
-        raise ValueError("MATE_E2E_TARGET_TWEET_URL is required for interact scenarios")
     return (
         f"{header}\n"
-        f"Find exactly one X post suitable for account nurturing{product_clause}.\n"
-        "Save it as pending current session marketing interaction data.\n"
-        "The pending interaction action must be like or retweet.\n"
-        f"The target tweet URL is only a hint for topic and style: {target_tweet_url}\n"
-        "If that exact tweet cannot be saved as pending interaction data, choose one suitable recommended tweet instead.\n"
+        "Find exactly one existing X post suitable for account nurturing.\n"
+        "Use the marketing researcher find_tweets workflow, then submit exactly one result.\n"
+        "Save it as pending current session marketing interaction data for the next execution step.\n"
+        "Pipeline Context:\n"
+        "- [待执行] nurture_account / like_tweets: consume exactly one tweet from this research result.\n"
+        "Set like_count=1 and retweet_count=0.\n"
+        "The researcher may search and choose a different suitable tweet.\n"
         "Do not call like_and_retweet or any other execution batch during this seed step.\n"
         "Do not execute the interaction during this seed step.\n"
         "Do not reply.\n"
@@ -157,16 +153,14 @@ def build_seed_task_prompt(
 def build_reply_browser_seed_task_prompt(
     run_id: str,
     nonce: str,
-    target_tweet_url: str,
-    product_name: Optional[str],
+    reply_tweet_url: str,
 ) -> str:
     marker = f"{run_id} {nonce}"
     header = f"Run ID: {run_id}\nNonce: {nonce}\n\n"
-    product_clause = f" about {product_name}" if product_name else ""
     return (
         f"{header}\n"
-        f"Open this exact tweet in the browser: {target_tweet_url}\n"
-        f"Write exactly one reply draft{product_clause} using the tweet that is visible on the page.\n"
+        f"Open this exact tweet in the browser: {reply_tweet_url}\n"
+        "Write exactly one reply draft using the tweet that is visible on the page.\n"
         "Save it as the current session reply draft.\n"
         "Do not publish the reply.\n"
         "Do not use marketing batch tools.\n"
@@ -183,7 +177,6 @@ def build_execute_task_prompt(
     run_id: str,
     nonce: str,
     publish_text_prefix: str,
-    target_tweet_url: Optional[str],
 ) -> str:
     marker = f"{run_id} {nonce}"
     header = f"Run ID: {run_id}\nNonce: {nonce}\n\n"
@@ -205,11 +198,13 @@ def build_execute_task_prompt(
         )
     return (
         f"{header}\n"
-        "Execute the existing interaction record already saved in this session.\n"
+        "Run the nurture_account / like_and_retweet execution step for the current session.\n"
+        "Consume exactly one existing pending tweet_interact record.\n"
         "Do not search for new tweets.\n"
-        "Do not create a new interaction plan.\n"
+        "Do not create new interaction candidates.\n"
+        "Do not reply.\n"
         "Do not ask for additional confirmation unless the system requires authorization.\n"
-        "Perform the prepared interaction only."
+        "Execute the prepared like interaction only."
     )
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -31,6 +32,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--environment", choices=("local", "remote"))
     parser.add_argument("--capability", choices=("extension", "api", "auto"))
     parser.add_argument("--task-type", choices=("reply", "publish", "interact"))
+    parser.add_argument(
+        "--reply-tweet-url",
+        help="Reply scenario target tweet URL. Overrides MATE_E2E_REPLY_TWEET_URL.",
+    )
     return parser.parse_args()
 
 
@@ -101,6 +106,9 @@ def main() -> int:
     from runner import run_scenario  # type: ignore
 
     config = load_e2e_config(base_dir)
+    reply_tweet_url = str(args.reply_tweet_url or "").strip()
+    if reply_tweet_url:
+        config = replace(config, reply_tweet_url=reply_tweet_url)
     result_dir = config.result_dir
     result_dir.mkdir(parents=True, exist_ok=True)
     log_path = result_dir / "latest.log"

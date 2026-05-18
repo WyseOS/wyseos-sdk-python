@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import traceback
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -41,6 +42,8 @@ DEFAULT_MARKETING_SKILLS = [
 ]
 SEED_TIMEOUT_FLOOR_SECONDS = 180
 MARKETING_BATCH_COMPLETED_PREFIX = "Marketing batch completed:"
+DEFAULT_MARKETING_PRODUCT_NAME = "Hyperagent"
+DEFAULT_MARKETING_PRODUCT_ID = "5aa3c256-6954-424f-833a-9d3bfaf96a4b"
 
 
 def should_stop_on_marketing_batch(content: str, stream_label: str) -> bool:
@@ -145,6 +148,33 @@ class E2ETaskRunner(TaskRunner):
         self._clear_pending_input_state()
         print("-> Sent authorization response")
 
+    def _handle_x_api_account_select(
+        self,
+        payload: Dict[str, Any],
+        result_container: Dict,
+        completion_events: Dict,
+    ) -> None:
+        error = self._account_selection.start(payload)
+        if error:
+            result_container["has_error"] = True
+            result_container["error"] = error
+            completion_events["error"].set()
+            return
+
+        request_id = self._account_selection.state.request_id
+        if not request_id:
+            return
+        selected = random.choice(self._account_selection.state.accounts)
+        response_text = self._account_selection.build_selection_response_text(selected)
+        self.ws_client.send_message(
+            WebSocketClient.create_text_input_response(request_id, response_text)
+        )
+        self._clear_pending_input_state()
+        username = str(
+            selected.get("external_username") or selected.get("external_user_id") or ""
+        ).strip()
+        print(f"-> Auto-selected X account: {username or 'unknown'}")
+
     def _handle_message(
         self,
         message: Dict[str, Any],
@@ -165,6 +195,14 @@ class E2ETaskRunner(TaskRunner):
                 completion_events,
                 options,
                 timestamp,
+            )
+            return
+        x_api_account_select_payload = self._account_selection.extract_payload(message)
+        if x_api_account_select_payload is not None:
+            self._handle_x_api_account_select(
+                x_api_account_select_payload,
+                result_container,
+                completion_events,
             )
             return
         super()._handle_message(message, result_container, completion_events, options)
@@ -253,13 +291,21 @@ def _append_log(log_path: Path, text: str) -> None:
         f.write("\n")
 
 
-def _build_extra(config: E2EConfig) -> Dict[str, Any]:
-    extra: Dict[str, Any] = {
+def _build_extra() -> Dict[str, Any]:
+    return {
         "skills": DEFAULT_MARKETING_SKILLS,
+        "marketing_product": {"product_id": DEFAULT_MARKETING_PRODUCT_ID},
     }
-    if config.product_id:
-        extra["marketing_product"] = {"product_id": config.product_id}
-    return extra
+
+
+def _product_context() -> str:
+    return f"Product context: {DEFAULT_MARKETING_PRODUCT_NAME}."
+
+
+def _with_product_context(scenario: Scenario, task: str) -> str:
+    if scenario.task_type != "interact":
+        return task
+    return f"{task}\n\n{_product_context()}"
 
 
 def _seed_data_types_for(scenario: Scenario) -> tuple[str, ...]:
@@ -400,10 +446,10 @@ def run_scenario(
             run_id=run_id,
             nonce=nonce,
             publish_text_prefix=config.publish_text_prefix,
-            target_tweet_url=config.target_tweet_url,
-            product_name=config.product_name,
+            reply_tweet_url=config.reply_tweet_url,
         )
-        seed_extra = _build_extra(config)
+        seed_task = _with_product_context(scenario, seed_task)
+        seed_extra = _build_extra()
         req = CreateSessionRequest(
             task=seed_task,
             mode=TaskMode.Marketing.value,
@@ -428,14 +474,13 @@ def run_scenario(
         if (
             not _has_seeded_marketing_data(data_counts)
             and browser_available
-            and config.target_tweet_url
+            and config.reply_tweet_url
             and _should_retry_reply_seed_with_browser(scenario, seed_result)
         ):
             browser_seed_task = build_reply_browser_seed_task_prompt(
                 run_id=run_id,
                 nonce=nonce,
-                target_tweet_url=config.target_tweet_url,
-                product_name=config.product_name,
+                reply_tweet_url=config.reply_tweet_url,
             )
             print("[seed] retry with browser fallback")
             seed_result = _run_session_task(
@@ -519,9 +564,8 @@ def run_scenario(
             run_id=run_id,
             nonce=nonce,
             publish_text_prefix=config.publish_text_prefix,
-            target_tweet_url=config.target_tweet_url,
         )
-        execute_extra = _build_extra(config)
+        execute_extra = _build_extra()
         ignored_message_ids = _session_message_ids(config, session_id)
         result = _run_session_task(
             config=config,
