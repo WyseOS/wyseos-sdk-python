@@ -13,6 +13,10 @@ EXPECTED_FAILURE_CODES = {
     "REPLY_API_UNSUPPORTED",
     "EXTENSION_REQUIRED",
 }
+LOCAL_EXTENSION_DISCONNECTED_MARKERS = {
+    "EXTENSION_REQUIRED",
+    "Extension session disconnected.",
+}
 ENVIRONMENT_ERROR_CODES = {
     "ACCOUNT_IDENTIFIER_REQUIRED",
 }
@@ -117,6 +121,17 @@ def classify_result(scenario: Scenario, result: TaskResult) -> AssertionResult:
             "FAIL",
             scenario.expected_reason,
             "Expected failure reason was not observed",
+        )
+
+    if (
+        scenario.environment == "local"
+        and scenario.capability == "extension"
+        and any(_contains(parts, marker) for marker in LOCAL_EXTENSION_DISCONNECTED_MARKERS)
+    ):
+        return AssertionResult(
+            "ERROR",
+            "extension_disconnected",
+            "Local browser extension session is not connected",
         )
 
     for code in EXPECTED_FAILURE_CODES:
